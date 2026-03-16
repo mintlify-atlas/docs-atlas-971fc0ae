@@ -1,0 +1,158 @@
+---
+title: Orchestrate Airbyte with Dagster
+description: Trigger Airbyte sync jobs from Dagster using the official dagster-airbyte integration.
+---
+
+Airbyte is an official integration in the Dagster project. The `dagster-airbyte` library lets you trigger Airbyte sync jobs as ops within a Dagster job, making it easy to build end-to-end data pipelines that sequence ingestion with transformation.
+
+## Prerequisites
+
+- A running Airbyte self-managed instance
+- Dagster installed — see the [Dagster getting started guide](https://docs.dagster.io/getting-started)
+- An Airbyte connection with **sync frequency** set to **manual**
+
+## Setup
+
+<Steps>
+  <Step title="Install dagster-airbyte">
+    ```bash
+    pip install dagster dagster-airbyte
+    ```
+  </Step>
+
+  <Step title="Find your Airbyte connection ID">
+    Open the Airbyte UI, navigate to **Connections**, and click your connection. Copy the connection UUID from the URL.
+  </Step>
+
+  <Step title="Create the job file">
+    Create a directory and a Python file for your Dagster job:
+
+    ```bash
+    mkdir airbyte_dagster
+    touch airbyte_dagster/airbyte_dagster.py
+    ```
+  </Step>
+</Steps>
+
+## Basic job
+
+The following example creates a Dagster job that triggers a single Airbyte sync.
+
+```python
+from dagster import job
+from dagster_airbyte import airbyte_resource, airbyte_sync_op
+
+my_airbyte_resource = airbyte_resource.configured(
+    {
+        "host": {"env": "AIRBYTE_HOST"},
+        "port": {"env": "AIRBYTE_PORT"},
+    }
+)
+
+sync_foobar = airbyte_sync_op.configured(
+    {"connection_id": "<YOUR_CONNECTION_UUID>"},
+    name="sync_foobar",
+)
+
+@job(resource_defs={"airbyte": my_airbyte_resource})
+def my_simple_airbyte_job():
+    sync_foobar()
+```
+
+### Resource parameters
+
+The `airbyte_resource` accepts the following configuration:
+
+<ParamField path="host" type="string" required>
+  Hostname of your Airbyte instance.
+</ParamField>
+<ParamField path="port" type="string" required>
+  Port your Airbyte instance is running on.
+</ParamField>
+<ParamField path="use_https" type="boolean">
+  Whether to use HTTPS. Defaults to `False`.
+</ParamField>
+<ParamField path="request_max_retries" type="integer">
+  Maximum number of retries for failed API requests.
+</ParamField>
+<ParamField path="request_retry_delay" type="float">
+  Seconds to wait between retries.
+</ParamField>
+
+### Op parameters
+
+The `airbyte_sync_op` accepts the following configuration:
+
+<ParamField path="connection_id" type="string" required>
+  UUID of the Airbyte connection to trigger.
+</ParamField>
+<ParamField path="poll_interval" type="float">
+  Seconds to wait between status polls.
+</ParamField>
+<ParamField path="poll_timeout" type="float">
+  Maximum seconds to wait before timing out.
+</ParamField>
+
+## Run the job
+
+```bash
+dagster job execute -f airbyte_dagster/airbyte_dagster.py
+```
+
+## Multi-connection pipeline
+
+This example runs two Airbyte syncs in sequence and then triggers a dbt transformation.
+
+```python
+from dagster import job, op, In, Nothing
+from dagster_airbyte import airbyte_resource, airbyte_sync_op
+
+my_airbyte_resource = airbyte_resource.configured(
+    {
+        "host": {"env": "AIRBYTE_HOST"},
+        "port": {"env": "AIRBYTE_PORT"},
+    }
+)
+
+sync_stripe = airbyte_sync_op.configured(
+    {"connection_id": "<STRIPE_CONNECTION_UUID>"},
+    name="sync_stripe",
+)
+
+sync_github = airbyte_sync_op.configured(
+    {"connection_id": "<GITHUB_CONNECTION_UUID>"},
+    name="sync_github",
+)
+
+@op(ins={"stripe_done": In(Nothing), "github_done": In(Nothing)})
+def run_dbt_transformations(context):
+    import subprocess
+    subprocess.run(["dbt", "run", "--project-dir", "/path/to/dbt"], check=True)
+    context.log.info("dbt transformations complete")
+
+@job(resource_defs={"airbyte": my_airbyte_resource})
+def full_pipeline():
+    stripe_result = sync_stripe()
+    github_result = sync_github()
+    run_dbt_transformations(
+        stripe_done=stripe_result,
+        github_done=github_result,
+    )
+```
+
+## Using environment variables
+
+Store your Airbyte host and port in environment variables to avoid hardcoding connection details:
+
+```bash
+export AIRBYTE_HOST="localhost"
+export AIRBYTE_PORT="8001"
+```
+
+Then reference them in your resource configuration using `{"env": "VAR_NAME"}` as shown in the examples above.
+
+## Additional resources
+
+- [dagster-airbyte API documentation](https://docs.dagster.io/_apidocs/libraries/dagster-airbyte)
+- [Dynamically configuring Airbyte with dagster-airbyte (tutorial)](https://airbyte.com/tutorials/configure-airbyte-with-python-dagster)
+- [E-commerce analytics stack: Airbyte + dbt + Dagster + BigQuery](https://github.com/airbytehq/quickstarts/tree/main/ecommerce_analytics_bigquery)

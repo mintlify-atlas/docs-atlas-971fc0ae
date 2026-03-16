@@ -1,0 +1,141 @@
+---
+title: BigQuery Destination
+description: Load data into Google BigQuery using Batched Standard Inserts or GCS staging, with full support for typing, deduplication, and partitioned tables.
+---
+
+Airbyte's certified BigQuery destination connector loads data into Google BigQuery. It supports all Airbyte sync modes and produces partitioned, clustered tables optimized for analytical queries.
+
+## Prerequisites
+
+- A Google Cloud project with BigQuery enabled
+- A BigQuery dataset to sync data into
+- A Google Cloud [Service Account](https://cloud.google.com/iam/docs/service-accounts) with the **BigQuery User** and **BigQuery Data Editor** roles
+- The Service Account Key in JSON format
+
+<Note>
+Queries in BigQuery can only reference datasets in the same physical location. If you plan to combine Airbyte-synced data with other datasets, create your BigQuery datasets in the same region.
+</Note>
+
+## Setup guide
+
+<Steps>
+  <Step title="Choose a data loading method">
+    <Tabs>
+      <Tab title="Batched Standard Inserts (default)">
+        The simplest loading method. Airbyte uses the BigQuery driver to convert INSERT statements to file uploads, which BigQuery loads in batches. Staging files are managed and deleted automatically by BigQuery after the load completes.
+      </Tab>
+      <Tab title="GCS Staging">
+        Use this method if you want more control over where staging files are stored.
+
+        1. [Create a Cloud Storage bucket](https://cloud.google.com/storage/docs/creating-buckets) with **Protection Tools** set to `none` or **Object versioning**. The bucket must not have a retention policy.
+        2. [Create an HMAC key and access ID](https://cloud.google.com/storage/docs/authentication/managing-hmackeys#create).
+        3. Grant the **Storage Object Admin** role to the same Service Account used for BigQuery access.
+
+        Your bucket must use a Google-managed encryption key (the default). Customer-managed encryption keys (CMEK) are not supported.
+      </Tab>
+    </Tabs>
+  </Step>
+  <Step title="Set up the BigQuery connector in Airbyte">
+    1. In Airbyte, go to **Destinations** > **+ New destination** and select **BigQuery**.
+    2. Enter a name for the destination.
+    3. For **Project ID**, enter your Google Cloud project ID.
+    4. For **Dataset Location**, select the location for your BigQuery dataset.
+
+    <Warning>
+    You cannot change the dataset location after it is set.
+    </Warning>
+
+    5. For **Default Dataset ID**, enter the BigQuery dataset name where tables will be created.
+    6. For **Loading Method**, select **Batched Standard Inserts** or **GCS Staging**.
+    7. For **Service Account Key JSON**, paste the full contents of your service account key JSON file (including brackets).
+    8. (Optional) For **Transformation Query Run Type**, choose `interactive` (default) or `batch`.
+    9. (Optional) For **Google BigQuery Client Chunk Size**, use the default 15 MiB. Decrease if you see memory or networking issues.
+    10. Click **Set up destination**.
+  </Step>
+</Steps>
+
+## Supported sync modes
+
+| Mode | Supported |
+|------|-----------|
+| Full Refresh - Overwrite | Yes |
+| Full Refresh - Append | Yes |
+| Full Refresh - Overwrite + Deduped | Yes |
+| Incremental - Append | Yes |
+| Incremental - Append + Deduped | Yes |
+
+## Output schema
+
+Airbyte writes data to final tables with the following metadata columns in addition to your source data:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `airbyte_raw_id` | STRING | A unique UUID for each record |
+| `_airbyte_generation_id` | INTEGER | Generation identifier for the sync |
+| `airbyte_extracted_at` | TIMESTAMP | When Airbyte read the record from the source |
+| `_airbyte_meta` | JSON | Error/change metadata |
+
+Final tables are **partitioned** by `airbyte_extracted_at` (daily granularity, UTC) and **clustered** by `airbyte_extracted_at` and the table's primary keys.
+
+## Data type mapping
+
+| Airbyte type | BigQuery type |
+|-------------|---------------|
+| STRING | STRING |
+| NUMBER | NUMERIC |
+| INTEGER | INT64 |
+| BOOLEAN | BOOL |
+| STRING (TIMESTAMP_WITH_TIMEZONE) | TIMESTAMP |
+| STRING (TIMESTAMP_WITHOUT_TIMEZONE) | DATETIME |
+| STRING (TIME_WITHOUT_TIMEZONE) | TIME |
+| DATE | DATE |
+| OBJECT | JSON |
+| ARRAY | JSON |
+
+## Naming conventions
+
+Airbyte replaces invalid characters in dataset and table names with underscores (`_`). Since BigQuery hides datasets that start with `_` in the Explorer panel, Airbyte prepends `n` to any converted namespace name that would otherwise start with `_`.
+
+## Namespace support
+
+This destination supports [namespaces](/using-airbyte/namespaces). The namespace maps to a BigQuery dataset.
+
+## Troubleshooting
+
+<Accordion title="Permission errors">
+  - Verify the service account has **BigQuery User** and **BigQuery Data Editor** roles.
+  - For GCS staging, verify the service account has **Storage Object Admin** on the staging bucket.
+  - Verify HMAC keys are created for the correct service account.
+</Accordion>
+
+<Accordion title="GCS staging issues">
+  - Ensure the Cloud Storage bucket does not have a retention policy.
+  - Ensure the bucket uses a Google-managed encryption key (not CMEK).
+  - Verify the bucket is accessible from Airbyte.
+</Accordion>
+
+## Configuration reference
+
+<ParamField path="project_id" type="string" required>
+  Your Google Cloud project ID.
+</ParamField>
+
+<ParamField path="dataset_id" type="string" required>
+  The BigQuery dataset ID where tables will be created.
+</ParamField>
+
+<ParamField path="dataset_location" type="string" required>
+  The geographic location of your BigQuery dataset (e.g., `US`, `EU`, `us-central1`).
+</ParamField>
+
+<ParamField path="loading_method" type="object" required>
+  The loading method: `batched_standard_inserts` or `gcs_staging`.
+</ParamField>
+
+<ParamField path="credentials_json" type="string">
+  The full contents of your Google Cloud service account key JSON file.
+</ParamField>
+
+<ParamField path="transformation_priority" type="string">
+  BigQuery query run type: `interactive` (default) or `batch`.
+</ParamField>

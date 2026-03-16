@@ -1,122 +1,237 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "Airbyte",
+  "theme": "linden",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#5d59e6",
+    "light": "#aca4e2",
+    "dark": "#0c0c34"
   },
   "favicon": "/favicon.svg",
+  "logo": {
+    "light": "https://media.brand.dev/d31a2c8c-ecd3-4fec-800e-fad03ad76d2a.svg",
+    "dark": "https://media.brand.dev/f660a1ea-6ba1-49cf-a084-b8be128dd015.svg"
+  },
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/airbytehq/airbyte"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/airbytehq/airbyte"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Get Started",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Overview",
             "pages": [
-              "index",
-              "quickstart",
-              "development"
+              "introduction",
+              "quickstart"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Using Airbyte",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
-            ]
-          },
-          {
-            "group": "Writing content",
-            "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
-            ]
-          },
-          {
-            "group": "AI tools",
-            "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "using-airbyte/add-a-source",
+              "using-airbyte/add-a-destination",
+              "using-airbyte/set-up-a-connection",
+              "using-airbyte/core-concepts",
+              "using-airbyte/sync-modes",
+              "using-airbyte/sync-schedules",
+              "using-airbyte/schema-change-management",
+              "using-airbyte/namespaces",
+              "using-airbyte/typing-deduplication"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "Deploy",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Deployment Options",
             "pages": [
-              "api-reference/introduction"
+              "deploy/overview",
+              "deploy/abctl",
+              "deploy/helm-kubernetes",
+              "deploy/docker-compose"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Cloud Infrastructure",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "deploy/aws",
+              "deploy/gcp",
+              "deploy/azure"
+            ]
+          },
+          {
+            "group": "Self-Managed Enterprise",
+            "pages": [
+              "deploy/enterprise-setup",
+              "deploy/enterprise-implementation"
+            ]
+          },
+          {
+            "group": "Operations",
+            "pages": [
+              "deploy/secrets",
+              "deploy/troubleshoot-deploy",
+              "deploy/connector-updates"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Connectors",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "connectors/connector-catalog",
+              "connectors/connector-support-levels",
+              "connectors/custom-connectors"
+            ]
+          },
+          {
+            "group": "Popular Sources",
+            "pages": [
+              "connectors/sources/postgres",
+              "connectors/sources/mysql",
+              "connectors/sources/salesforce",
+              "connectors/sources/hubspot",
+              "connectors/sources/stripe",
+              "connectors/sources/github",
+              "connectors/sources/google-analytics-data-api",
+              "connectors/sources/snowflake",
+              "connectors/sources/mongodb-v2",
+              "connectors/sources/s3"
+            ]
+          },
+          {
+            "group": "Popular Destinations",
+            "pages": [
+              "connectors/destinations/bigquery",
+              "connectors/destinations/snowflake",
+              "connectors/destinations/postgres",
+              "connectors/destinations/redshift",
+              "connectors/destinations/s3",
+              "connectors/destinations/databricks"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Build Connectors",
+        "groups": [
+          {
+            "group": "Connector Development",
+            "pages": [
+              "build-connectors/overview",
+              "build-connectors/connector-builder-ui",
+              "build-connectors/low-code-cdk",
+              "build-connectors/python-cdk",
+              "build-connectors/local-development"
+            ]
+          },
+          {
+            "group": "Connector Builder",
+            "pages": [
+              "build-connectors/builder/authentication",
+              "build-connectors/builder/pagination",
+              "build-connectors/builder/incremental-sync",
+              "build-connectors/builder/partitioning",
+              "build-connectors/builder/record-processing",
+              "build-connectors/builder/error-handling",
+              "build-connectors/builder/custom-components"
+            ]
+          },
+          {
+            "group": "Testing & Publishing",
+            "pages": [
+              "build-connectors/testing-connectors",
+              "build-connectors/submit-new-connector",
+              "build-connectors/connector-metadata-file",
+              "build-connectors/best-practices"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Platform",
+        "groups": [
+          {
+            "group": "Architecture",
+            "pages": [
+              "platform/architecture-overview",
+              "platform/airbyte-protocol",
+              "platform/tech-stack",
+              "platform/jobs",
+              "platform/supported-data-types"
+            ]
+          },
+          {
+            "group": "Data Movement",
+            "pages": [
+              "platform/cdc",
+              "platform/cdc-best-practices",
+              "platform/typing-deduplication",
+              "platform/resumability",
+              "platform/secrets"
+            ]
+          },
+          {
+            "group": "Access & Security",
+            "pages": [
+              "platform/access-management",
+              "platform/organizations-workspaces",
+              "platform/sso"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Developers",
+        "groups": [
+          {
+            "group": "APIs & SDKs",
+            "pages": [
+              "developers/api-documentation",
+              "developers/terraform-provider",
+              "developers/pyairbyte"
+            ]
+          },
+          {
+            "group": "PyAirbyte",
+            "pages": [
+              "developers/pyairbyte/overview",
+              "developers/pyairbyte/getting-started",
+              "developers/pyairbyte/api-reference"
+            ]
+          },
+          {
+            "group": "Orchestration",
+            "pages": [
+              "developers/orchestration/airflow",
+              "developers/orchestration/prefect",
+              "developers/orchestration/dagster",
+              "developers/orchestration/kestra"
+            ]
+          },
+          {
+            "group": "MCP Servers",
+            "pages": [
+              "developers/mcp-servers/overview"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

@@ -1,0 +1,96 @@
+---
+title: Custom Connectors
+description: Build your own Airbyte connector when the catalog doesn't have what you need — using the no-code Connector Builder, the Python CDK, or a custom Docker image.
+---
+
+If the Airbyte catalog doesn't have a connector for your data source or destination, you have several options:
+
+- **Request a new connector** from the community or Airbyte team.
+- **Contribute a connector** to the open-source catalog.
+- **Build a connector for your own workspace** without contributing it upstream.
+
+## Requesting a connector
+
+To request a new connector, open a discussion at [github.com/airbytehq/airbyte/discussions](https://github.com/airbytehq/airbyte/discussions/new?category=new-connector-request). Include the name of the source or destination, a link to its API documentation, and a description of your use case.
+
+## Building a connector
+
+### Use Connector Builder (recommended)
+
+If your data source exposes an HTTP API, use the [Connector Builder](https://docs.airbyte.com/connector-development/connector-builder-ui/overview). The Builder provides a no-code UI for defining authentication, pagination, stream schemas, and incremental sync logic. It covers the vast majority of HTTP-based APIs.
+
+You can publish a Builder connector to your workspace only, or contribute it to the Airbyte Marketplace catalog.
+
+<Tip>
+Use the Connector Builder in ~99% of cases where your source has an HTTP API. Only write code from scratch when the Builder cannot support your specific API pattern.
+</Tip>
+
+### Use the Python CDK
+
+If the Connector Builder can't support your use case — for example, if you need to connect to a proprietary binary protocol or run complex custom logic — use the [Python CDK](/build-connectors/overview).
+
+```bash
+# Install the CDK
+pip install airbyte-cdk
+
+# Scaffold a new connector
+airbyte-cdk source init my-connector
+```
+
+The CDK provides base classes for sources and destinations, handling the Airbyte protocol details so you can focus on the integration logic.
+
+### Use the Java CDK
+
+For JDBC-based database connectors, Airbyte provides a Java CDK with built-in support for incremental sync, CDC, and SSH tunneling. Most of Airbyte's certified database connectors are built on it.
+
+### Build a custom Docker image
+
+<Warning>
+Building a connector from scratch using a custom Docker image is not recommended. Use this approach only when you cannot use the Connector Builder or a CDK (for example, when using a language other than Python or Java).
+</Warning>
+
+Airbyte connectors are Docker containers that implement the [Airbyte Protocol](https://docs.airbyte.com/understanding-airbyte/airbyte-protocol). Your container must respond to three commands: `spec`, `check`, and `read` (for sources) or `write` (for destinations).
+
+See the following guides for building custom Docker images:
+- [Using Custom Connectors](https://docs.airbyte.com/platform/operator-guides/using-custom-connectors)
+- [Airbyte Docker Protocol](https://docs.airbyte.com/platform/understanding-airbyte/airbyte-protocol-docker)
+
+## Setting up a custom connector in Airbyte
+
+<Steps>
+  <Step title="Build your connector">
+    Build your connector using the Connector Builder, a CDK, or a custom Docker image. Make note of the Docker image name and tag.
+  </Step>
+  <Step title="Add the connector to your workspace">
+    In the Airbyte UI, go to **Settings** > **Sources** (or **Destinations**). Click **+ New connector** and enter the Docker image name and tag.
+  </Step>
+  <Step title="Create a connection">
+    Your custom connector now appears in the source or destination list. Create a new connection using it just like any other connector.
+  </Step>
+</Steps>
+
+## Upgrading a connector version
+
+When you release a new version of your connector, update the Docker image tag in Airbyte:
+
+<Steps>
+  <Step title="Navigate to workspace settings">
+    In the navigation bar, click **Workspace settings** > **Sources** or **Destinations**.
+  </Step>
+  <Step title="Find your connector">
+    Locate your connector in the list and click the edit (pencil) icon.
+  </Step>
+  <Step title="Update the version">
+    In the dialog, update the Docker image tag to the new version and save.
+  </Step>
+</Steps>
+
+## Contributing a connector to the catalog
+
+If you'd like your connector to be available to all Airbyte users, contribute it to the open-source repository. See the [contributing guide](https://github.com/airbytehq/airbyte/blob/master/CONTRIBUTING.md) for requirements and the review process.
+
+Before submitting, make sure your connector:
+
+- Passes all [Acceptance Tests](/build-connectors/testing-connectors).
+- Includes documentation covering setup, configuration fields, supported sync modes, and known limitations.
+- Has a `metadata.yaml` file with the correct connector category and support level.

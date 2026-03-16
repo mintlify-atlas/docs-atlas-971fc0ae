@@ -1,0 +1,43 @@
+---
+title: 'Docker Compose (legacy)'
+description: 'Docker Compose deployments are no longer supported. Migrate to a Kubernetes-based deployment.'
+---
+
+<Warning>
+Migration from Docker Compose is no longer supported. The `--migrate` flag has been deprecated and removed from `abctl`. Docker Compose deployments are not supported.
+</Warning>
+
+If you were previously running Airbyte using Docker Compose, perform a fresh deployment of Airbyte instead.
+
+## Migration path
+
+You have two options to get started with a supported deployment:
+
+<CardGroup cols={2}>
+  <Card title="abctl (local)" icon="terminal" href="/deploy/abctl">
+    The fastest way to get Airbyte running locally. Uses Docker under the hood but manages Kubernetes automatically.
+  </Card>
+  <Card title="Helm on Kubernetes" icon="server" href="/deploy/helm-kubernetes">
+    Deploy Airbyte into any existing Kubernetes cluster. Recommended for production workloads.
+  </Card>
+</CardGroup>
+
+## Preserving your configuration
+
+Historical sync data from your Docker Compose deployment cannot be migrated to a new installation.
+
+If you need to preserve your existing connection configurations, you can manually recreate them in your new Airbyte instance.
+
+### Using an external database
+
+If your Docker Compose deployment used an external database, you can configure your new installation to connect to the same database. This preserves your connection configurations and workspace settings. See the database integration documentation for setup instructions.
+
+## Why Docker Compose is no longer supported
+
+Airbyte is built to run on Kubernetes to enable the performance, scalability, and isolation needed for production data integration workloads. Kubernetes allows Airbyte to:
+
+- Run each sync in an isolated pod with its own resource limits
+- Scale connector workloads independently from the control plane
+- Support high-availability deployments across multiple nodes
+
+Docker Compose does not provide these capabilities, which is why it is no longer the recommended deployment method.

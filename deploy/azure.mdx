@@ -1,0 +1,102 @@
+---
+title: 'Deploy on Azure'
+description: 'Infrastructure guidance and role requirements for deploying Airbyte on Microsoft Azure.'
+---
+
+Airbyte supports Microsoft Azure as a cloud provider. You can deploy Airbyte on Azure Kubernetes Service (AKS).
+
+## Infrastructure overview
+
+For a production-ready deployment, Airbyte recommends running all components in the same virtual network:
+
+| Component | Recommendation |
+|---|---|
+| Kubernetes cluster | Azure Kubernetes Service (AKS) |
+| Object storage | Azure Blob Storage container for log and state storage |
+| Database | Azure Database for PostgreSQL |
+| Secrets manager | Azure Key Vault for connector secrets |
+
+<Info>
+Run Airbyte on instances with at least 2 cores and 8 GB of RAM per node.
+</Info>
+
+## Azure Key Vault policy
+
+Airbyte requires the ability to write and read secrets in an Azure Key Vault. Assign the **Key Vault Secrets Officer** built-in role, which grants the following permissions:
+
+```json
+{
+  "id": "/providers/Microsoft.Authorization/roleDefinitions/b86a8fe4-44ce-4948-aee5-eccb2c155cd7",
+  "properties": {
+    "roleName": "Key Vault Secrets Officer",
+    "description": "Perform any action on the secrets of a key vault, except manage permissions.",
+    "permissions": [
+      {
+        "actions": [
+          "Microsoft.Authorization/*/read",
+          "Microsoft.Insights/alertRules/*",
+          "Microsoft.Resources/deployments/*",
+          "Microsoft.Resources/subscriptions/resourceGroups/read",
+          "Microsoft.Support/*",
+          "Microsoft.KeyVault/checkNameAvailability/read",
+          "Microsoft.KeyVault/deletedVaults/read",
+          "Microsoft.KeyVault/locations/*/read",
+          "Microsoft.KeyVault/vaults/*/read",
+          "Microsoft.KeyVault/operations/read"
+        ],
+        "dataActions": [
+          "Microsoft.KeyVault/vaults/secrets/*"
+        ]
+      }
+    ]
+  }
+}
+```
+
+## Configure Azure Blob Storage in values.yaml
+
+After creating your Azure Blob Storage container and adding your connection string to a Kubernetes secret, configure Airbyte to use Azure Blob Storage:
+
+```yaml
+global:
+  storage:
+    type: azure
+    storageSecretName: airbyte-config-secrets
+    bucket:
+      log: airbyte-bucket
+      state: airbyte-bucket
+      workloadOutput: airbyte-bucket
+    azure:
+      connectionStringSecretKey: azure-blob-store-connection-string
+```
+
+## Configure Azure Key Vault in values.yaml
+
+```yaml
+global:
+  secretsManager:
+    type: azureKeyVault
+    azureKeyVault:
+      vaultUrl: https://my-vault.vault.azure.net/
+      tenantId: 3fc863e9-4740-4871-bdd4-456903a04d4e
+      tags:
+        - key: team
+          value: deployments
+```
+
+## Create the Azure connection string secret
+
+Create a Kubernetes secret containing your Azure Blob Storage connection string:
+
+```bash
+kubectl create secret generic airbyte-config-secrets \
+  --from-literal=azure-blob-store-connection-string='DefaultEndpointsProtocol=https;AccountName=...;AccountKey=...;EndpointSuffix=core.windows.net' \
+  --namespace airbyte
+```
+
+## Next steps
+
+After setting up your Azure infrastructure and permissions:
+
+1. [Create your Kubernetes secrets](/deploy/secrets)
+2. [Install Airbyte with Helm](/deploy/helm-kubernetes)

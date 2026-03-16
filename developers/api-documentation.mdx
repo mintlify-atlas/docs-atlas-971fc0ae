@@ -1,0 +1,421 @@
+---
+title: API documentation
+description: Use the Airbyte REST API to programmatically manage sources, destinations, connections, and jobs.
+---
+
+The Airbyte API lets you interact with Airbyte programmatically. Use it to automate data pipeline management, integrate with orchestration tools like Airflow, or build on top of [Airbyte Embedded](https://airbyte.com/ai).
+
+## Get an access token
+
+Before making requests you need an access token. See [configuring API access](/developers/api-documentation) for setup instructions.
+
+## Base URL
+
+The base URL depends on your deployment:
+
+| Deployment | Base URL |
+|---|---|
+| Airbyte Cloud | `https://api.airbyte.com/v1/` |
+| Self-managed (localhost) | `http://localhost:8000/api/public/v1/` |
+| Self-managed (web) | `<YOUR_AIRBYTE_URL>/api/public/v1/` |
+
+## Make your first request
+
+The following example lists all source connectors in your workspace.
+
+<Tabs>
+  <Tab title="Cloud">
+    ```bash
+    curl --request GET \
+         --url 'https://api.airbyte.com/v1/sources?workspaceIds=<YOUR_WORKSPACE_ID>' \
+         --header 'accept: application/json' \
+         --header 'authorization: Bearer <YOUR_ACCESS_TOKEN>'
+    ```
+
+    ```json
+    {
+      "data": [
+        {
+          "sourceId": "<YOUR_SOURCE_ID>",
+          "name": "Snowflake",
+          "sourceType": "snowflake",
+          "definitionId": "e2d65910-8c8b-40a1-ae7d-ee2416b2bfa2",
+          "workspaceId": "<YOUR_WORKSPACE_ID>",
+          "configuration": {
+            "host": "<YOUR_VALUE>",
+            "role": "<YOUR_VALUE>",
+            "database": "<YOUR_VALUE>",
+            "warehouse": "<YOUR_VALUE>",
+            "credentials": {
+              "username": "<YOUR_USER>",
+              "auth_type": "username/password"
+            }
+          },
+          "createdAt": 1758053604
+        },
+        {
+          "sourceId": "<YOUR_SOURCE_ID>",
+          "name": "Stripe",
+          "sourceType": "stripe",
+          "definitionId": "e094cb9a-26de-4645-8761-65c0c425d1de",
+          "workspaceId": "<YOUR_WORKSPACE_ID>",
+          "configuration": {
+            "account_id": "<YOUR_ACCOUNT_ID>",
+            "start_date": "2023-07-01T00:00:00Z"
+          },
+          "createdAt": 1755562809
+        }
+      ],
+      "previous": "",
+      "next": ""
+    }
+    ```
+  </Tab>
+  <Tab title="Self-managed (localhost)">
+    ```bash
+    curl --request GET \
+         --url 'http://localhost:8000/api/public/v1/sources' \
+         --header 'accept: application/json' \
+         --header 'authorization: Bearer <YOUR_ACCESS_TOKEN>'
+    ```
+
+    ```json
+    {
+      "data": [
+        {
+          "sourceId": "<YOUR_SOURCE_ID>",
+          "name": "Snowflake",
+          "sourceType": "snowflake",
+          "workspaceId": "<YOUR_WORKSPACE_ID>",
+          "createdAt": 1758053604
+        }
+      ],
+      "previous": "",
+      "next": ""
+    }
+    ```
+  </Tab>
+  <Tab title="Self-managed (web)">
+    ```bash
+    curl --request GET \
+         --url '<YOUR_AIRBYTE_URL>/api/public/v1/sources' \
+         --header 'accept: application/json' \
+         --header 'authorization: Bearer <YOUR_ACCESS_TOKEN>'
+    ```
+  </Tab>
+</Tabs>
+
+## Core endpoints
+
+### Sources
+
+<AccordionGroup>
+  <Accordion title="GET /v1/sources — List sources">
+    Returns all source connectors in a workspace.
+
+    **Query parameters**
+
+    <ParamField query="workspaceIds" type="string">
+      Comma-separated list of workspace IDs to filter results.
+    </ParamField>
+    <ParamField query="limit" type="integer">
+      Maximum number of results to return. Defaults to 20.
+    </ParamField>
+    <ParamField query="offset" type="integer">
+      Number of results to skip for pagination.
+    </ParamField>
+
+    **Response fields**
+
+    <ResponseField name="data" type="array">
+      Array of source objects.
+    </ResponseField>
+    <ResponseField name="data[].sourceId" type="string">
+      Unique identifier for the source.
+    </ResponseField>
+    <ResponseField name="data[].name" type="string">
+      Display name of the source.
+    </ResponseField>
+    <ResponseField name="data[].sourceType" type="string">
+      Connector type identifier (e.g., `stripe`, `snowflake`).
+    </ResponseField>
+    <ResponseField name="data[].workspaceId" type="string">
+      Workspace the source belongs to.
+    </ResponseField>
+    <ResponseField name="data[].configuration" type="object">
+      Connector-specific configuration. Sensitive fields are masked.
+    </ResponseField>
+    <ResponseField name="data[].createdAt" type="integer">
+      Unix timestamp of when the source was created.
+    </ResponseField>
+  </Accordion>
+
+  <Accordion title="POST /v1/sources — Create a source">
+    Creates a new source connector.
+
+    ```bash
+    curl --request POST \
+         --url 'https://api.airbyte.com/v1/sources' \
+         --header 'accept: application/json' \
+         --header 'authorization: Bearer <YOUR_ACCESS_TOKEN>' \
+         --header 'content-type: application/json' \
+         --data '{
+           "name": "My Stripe Source",
+           "workspaceId": "<YOUR_WORKSPACE_ID>",
+           "definitionId": "e094cb9a-26de-4645-8761-65c0c425d1de",
+           "configuration": {
+             "account_id": "<YOUR_STRIPE_ACCOUNT_ID>",
+             "client_secret": "<YOUR_STRIPE_SECRET_KEY>",
+             "start_date": "2023-01-01T00:00:00Z"
+           }
+         }'
+    ```
+
+    **Body parameters**
+
+    <ParamField body="name" type="string" required>
+      Display name for the source.
+    </ParamField>
+    <ParamField body="workspaceId" type="string" required>
+      ID of the workspace to create the source in.
+    </ParamField>
+    <ParamField body="definitionId" type="string" required>
+      UUID of the connector definition. Find this in the connector catalog.
+    </ParamField>
+    <ParamField body="configuration" type="object" required>
+      Connector-specific configuration object.
+    </ParamField>
+  </Accordion>
+
+  <Accordion title="GET /v1/sources/{sourceId} — Get a source">
+    Returns a single source by ID.
+
+    ```bash
+    curl --request GET \
+         --url 'https://api.airbyte.com/v1/sources/<SOURCE_ID>' \
+         --header 'accept: application/json' \
+         --header 'authorization: Bearer <YOUR_ACCESS_TOKEN>'
+    ```
+  </Accordion>
+
+  <Accordion title="PATCH /v1/sources/{sourceId} — Update a source">
+    Updates an existing source. Only provide fields you want to change.
+
+    ```bash
+    curl --request PATCH \
+         --url 'https://api.airbyte.com/v1/sources/<SOURCE_ID>' \
+         --header 'accept: application/json' \
+         --header 'authorization: Bearer <YOUR_ACCESS_TOKEN>' \
+         --header 'content-type: application/json' \
+         --data '{"name": "Updated source name"}'
+    ```
+  </Accordion>
+
+  <Accordion title="DELETE /v1/sources/{sourceId} — Delete a source">
+    Permanently deletes a source and all associated connections.
+
+    <Warning>Deleting a source also deletes all connections that use it. This action cannot be undone.</Warning>
+
+    ```bash
+    curl --request DELETE \
+         --url 'https://api.airbyte.com/v1/sources/<SOURCE_ID>' \
+         --header 'authorization: Bearer <YOUR_ACCESS_TOKEN>'
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Destinations
+
+<AccordionGroup>
+  <Accordion title="GET /v1/destinations — List destinations">
+    Returns all destination connectors in a workspace.
+
+    ```bash
+    curl --request GET \
+         --url 'https://api.airbyte.com/v1/destinations?workspaceIds=<YOUR_WORKSPACE_ID>' \
+         --header 'accept: application/json' \
+         --header 'authorization: Bearer <YOUR_ACCESS_TOKEN>'
+    ```
+  </Accordion>
+
+  <Accordion title="POST /v1/destinations — Create a destination">
+    Creates a new destination connector.
+
+    ```bash
+    curl --request POST \
+         --url 'https://api.airbyte.com/v1/destinations' \
+         --header 'accept: application/json' \
+         --header 'authorization: Bearer <YOUR_ACCESS_TOKEN>' \
+         --header 'content-type: application/json' \
+         --data '{
+           "name": "My BigQuery Destination",
+           "workspaceId": "<YOUR_WORKSPACE_ID>",
+           "definitionId": "22f6c74f-5699-40ff-833c-4a879ea40133",
+           "configuration": {
+             "project_id": "my-gcp-project",
+             "dataset_id": "airbyte_data",
+             "dataset_location": "US"
+           }
+         }'
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Connections
+
+<AccordionGroup>
+  <Accordion title="GET /v1/connections — List connections">
+    Returns all connections in a workspace.
+
+    ```bash
+    curl --request GET \
+         --url 'https://api.airbyte.com/v1/connections?workspaceIds=<YOUR_WORKSPACE_ID>' \
+         --header 'accept: application/json' \
+         --header 'authorization: Bearer <YOUR_ACCESS_TOKEN>'
+    ```
+
+    **Response fields**
+
+    <ResponseField name="data[].connectionId" type="string">
+      Unique identifier for the connection.
+    </ResponseField>
+    <ResponseField name="data[].name" type="string">
+      Display name of the connection.
+    </ResponseField>
+    <ResponseField name="data[].sourceId" type="string">
+      ID of the source connector.
+    </ResponseField>
+    <ResponseField name="data[].destinationId" type="string">
+      ID of the destination connector.
+    </ResponseField>
+    <ResponseField name="data[].status" type="string">
+      Connection status: `active`, `inactive`, or `deprecated`.
+    </ResponseField>
+    <ResponseField name="data[].schedule" type="object">
+      Sync schedule configuration.
+    </ResponseField>
+  </Accordion>
+
+  <Accordion title="POST /v1/connections — Create a connection">
+    Creates a connection between a source and a destination.
+
+    ```bash
+    curl --request POST \
+         --url 'https://api.airbyte.com/v1/connections' \
+         --header 'accept: application/json' \
+         --header 'authorization: Bearer <YOUR_ACCESS_TOKEN>' \
+         --header 'content-type: application/json' \
+         --data '{
+           "name": "Stripe to BigQuery",
+           "sourceId": "<YOUR_SOURCE_ID>",
+           "destinationId": "<YOUR_DESTINATION_ID>",
+           "schedule": {
+             "scheduleType": "cron",
+             "cronExpression": "0 0 * * *"
+           },
+           "namespaceDefinition": "destination",
+           "prefix": "stripe_"
+         }'
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Jobs
+
+<AccordionGroup>
+  <Accordion title="POST /v1/jobs — Trigger a sync">
+    Triggers a manual sync job for a connection.
+
+    ```bash
+    curl --request POST \
+         --url 'https://api.airbyte.com/v1/jobs' \
+         --header 'accept: application/json' \
+         --header 'authorization: Bearer <YOUR_ACCESS_TOKEN>' \
+         --header 'content-type: application/json' \
+         --data '{
+           "connectionId": "<YOUR_CONNECTION_ID>",
+           "jobType": "sync"
+         }'
+    ```
+
+    ```json
+    {
+      "jobId": 18",
+      "status": "pending",
+      "jobType": "sync",
+      "startTime": "2024-01-15T10:00:00Z",
+      "connectionId": "<YOUR_CONNECTION_ID>"
+    }
+    ```
+
+    <ParamField body="connectionId" type="string" required>
+      ID of the connection to sync.
+    </ParamField>
+    <ParamField body="jobType" type="string" required>
+      Type of job to run. Use `sync` for data replication or `reset` to clear destination data.
+    </ParamField>
+  </Accordion>
+
+  <Accordion title="GET /v1/jobs/{jobId} — Get job status">
+    Returns the current status of a job.
+
+    ```bash
+    curl --request GET \
+         --url 'https://api.airbyte.com/v1/jobs/<JOB_ID>' \
+         --header 'accept: application/json' \
+         --header 'authorization: Bearer <YOUR_ACCESS_TOKEN>'
+    ```
+
+    ```json
+    {
+      "jobId": "18",
+      "status": "succeeded",
+      "jobType": "sync",
+      "startTime": "2024-01-15T10:00:00Z",
+      "lastUpdatedAt": "2024-01-15T10:04:37Z",
+      "connectionId": "<YOUR_CONNECTION_ID>",
+      "bytesSynced": 1048576,
+      "rowsSynced": 15420
+    }
+    ```
+
+    <ResponseField name="jobId" type="string">
+      Unique identifier for the job.
+    </ResponseField>
+    <ResponseField name="status" type="string">
+      Current job status: `pending`, `running`, `succeeded`, `failed`, or `cancelled`.
+    </ResponseField>
+    <ResponseField name="bytesSynced" type="integer">
+      Total bytes synced in this job run.
+    </ResponseField>
+    <ResponseField name="rowsSynced" type="integer">
+      Total rows synced in this job run.
+    </ResponseField>
+  </Accordion>
+
+  <Accordion title="DELETE /v1/jobs/{jobId} — Cancel a job">
+    Cancels a running job.
+
+    ```bash
+    curl --request DELETE \
+         --url 'https://api.airbyte.com/v1/jobs/<JOB_ID>' \
+         --header 'authorization: Bearer <YOUR_ACCESS_TOKEN>'
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Handle token expiry
+
+Access tokens are short-lived. To avoid authorization errors in your integration:
+
+- Cache the token along with its expiry time when you first receive it.
+- Before each request, check whether the token has expired. If it has, fetch a new one before proceeding.
+- If you receive a `401 Unauthorized` response, request a new token and retry the request once. Do not retry on consecutive 401 responses.
+
+## Full reference
+
+For the complete endpoint reference, authentication details, and interactive playground, see [reference.airbyte.com](https://reference.airbyte.com/reference/getting-started).
+
+<Note>
+Airbyte has deprecated the internal Configuration API. It was designed for communication between Airbyte components, not for managing deployments. Use the public API documented here instead.
+</Note>

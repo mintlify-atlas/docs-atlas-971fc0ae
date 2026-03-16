@@ -1,0 +1,186 @@
+---
+title: "Testing Connectors"
+description: "Run unit tests, integration tests, and connector acceptance tests to verify your Airbyte connector."
+---
+
+Airbyte's connector testing pyramid has four layers, each providing different kinds of coverage:
+
+<CardGroup cols={2}>
+  <Card title="Unit Tests" icon="vial">
+    Connector-specific tests written by you. Don't require access to the external API.
+  </Card>
+  <Card title="Integration Tests" icon="network-wired">
+    Connector-specific tests that may require a real or sandbox API account.
+  </Card>
+  <Card title="Connector Acceptance Tests (CAT)" icon="clipboard-check">
+    Connector-agnostic tests verifying protocol compliance. Require sandbox credentials.
+  </Card>
+  <Card title="Regression Tests" icon="code-compare">
+    Verify behavior hasn't changed unexpectedly between versions. Requires a cloud connection.
+  </Card>
+</CardGroup>
+
+All tests must pass before a connector pull request can be merged.
+
+## Running tests locally
+
+### Python connectors
+
+```bash
+# From within the connector directory
+
+# Quick fail-fast run
+poe test-fast
+
+# Unit tests only
+poe test-unit-tests
+
+# Integration tests
+poe test-integration-tests
+
+# Or run pytest directly
+poetry run pytest unit_tests/
+poetry run pytest integration_tests/
+```
+
+<Note>
+You don't have to use Poe. Running pytest directly from your IDE works well for Python connectors. Use `poe --help` from a connector directory to see all tasks available for that connector.
+</Note>
+
+### Java/Kotlin connectors
+
+<Warning>
+Airbyte is revamping its Java CDK and is not currently accepting new Java CDK connector contributions.
+</Warning>
+
+```bash
+# Unit tests
+./gradlew :airbyte-integrations:connectors:source-postgres:test
+
+# Integration tests
+./gradlew :airbyte-integrations:connectors:source-postgres:integrationTestJava
+
+# Or from the connector directory with Poe
+poe gradle unitTest
+poe gradle integrationTest
+```
+
+## Running the full CI test suite locally
+
+To run the same tests that CI runs:
+
+```bash
+airbyte-ci connectors --name=source-myconnector test
+```
+
+CI runs all available tests for a connector, including QA checks, unit tests, integration tests, and acceptance tests (when credentials are available). At minimum, it always runs:
+
+- Connector QA checks (static asset validation)
+- Unit tests from `unit_tests/`
+- Integration tests from `integration_tests/`
+
+## Connector Acceptance Tests (CAT)
+
+CAT is a language-agnostic test suite that verifies all connectors comply with the [Airbyte protocol](https://docs.airbyte.com/understanding-airbyte/airbyte-protocol). It tests operations like `spec`, `check`, `discover`, and `read` against a real or sandbox API.
+
+To run CAT locally, provide connector configuration as a `config.json` file:
+
+```bash
+mkdir -p .secrets
+cp your_test_credentials.json .secrets/config.json
+
+# Then run acceptance tests
+poe test-integration-tests  # or via airbyte-ci
+```
+
+CAT is configured via `acceptance-test-config.yml` in the connector's root directory. See the [CAT reference](https://docs.airbyte.com/connector-development/testing-connectors/connector-acceptance-tests-reference) for the full configuration options.
+
+## Test organization
+
+### Python connectors
+
+```
+source-myconnector/
+  unit_tests/          ← unit tests (no API access needed)
+    test_streams.py
+    test_auth.py
+  integration_tests/   ← integration tests (may need API access)
+    test_full_refresh.py
+  .secrets/            ← gitignored, holds test credentials
+    config.json
+  acceptance-test-config.yml  ← CAT configuration
+```
+
+### Writing good unit tests
+
+```python
+# unit_tests/test_streams.py
+import pytest
+from unittest.mock import MagicMock, patch
+from source_myapi.streams import Employees
+
+class TestEmployeesStream:
+    def test_parse_response(self):
+        stream = Employees(authenticator=MagicMock())
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "data": [
+                {"id": "1", "name": "Alice"},
+                {"id": "2", "name": "Bob"},
+            ]
+        }
+        records = list(stream.parse_response(mock_response))
+        assert len(records) == 2
+        assert records[0]["id"] == "1"
+
+    def test_next_page_token_with_cursor(self):
+        stream = Employees(authenticator=MagicMock())
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"data": [], "next_cursor": "abc123"}
+        token = stream.next_page_token(mock_response)
+        assert token == {"cursor": "abc123"}
+
+    def test_next_page_token_last_page(self):
+        stream = Employees(authenticator=MagicMock())
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"data": [], "next_cursor": None}
+        assert stream.next_page_token(mock_response) is None
+```
+
+## Connector QA checks
+
+CI runs static checks on connector assets before running any tests. Ensure your connector has:
+
+- A `README.md`
+- Documentation in `docs/integrations/sources/<connector-name>.md`
+- An `icon.svg` in the connector directory
+- A valid `metadata.yaml` file
+- A valid `acceptance-test-config.yml`
+
+Missing assets will fail the QA check and block the PR.
+
+## Fetching test secrets
+
+Airbyte stores integration test credentials in Google Secret Manager (GSM). To download them locally:
+
+```bash
+# List available secrets for the current connector
+airbyte-cdk secrets list
+
+# Download secrets to connector's secrets/ directory
+airbyte-cdk secrets fetch
+```
+
+See [Local Development](/build-connectors/local-development) for GSM setup details.
+
+## What CI checks
+
+| Check | Trigger | Requirements |
+|---|---|---|
+| QA checks | All PRs | No credentials needed |
+| Unit tests | All PRs | No credentials needed |
+| Integration tests | All PRs | May need credentials |
+| Connector Acceptance Tests | PRs with sandbox credentials | Credentials required |
+| Regression tests | PRs with cloud connection | Cloud connection required |
+
+CI is triggered automatically when you push changes that modify connector files. **All checks must pass to merge.**

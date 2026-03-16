@@ -1,0 +1,141 @@
+---
+title: "Low-Code CDK"
+description: "Build source connectors by editing YAML manifests with Airbyte's declarative Low-Code CDK."
+---
+
+The Low-Code CDK lets you build source connectors for REST APIs by describing your connector in a YAML manifest file rather than writing Python code. It's the same format that powers the Connector Builder UI — if you prefer working in a text editor or need capabilities not yet exposed in the UI, you can write YAML directly.
+
+<Info>
+Almost all YAML capabilities are also available in the Connector Builder UI. If you'd rather not write YAML, [use the UI instead](/build-connectors/connector-builder-ui).
+</Info>
+
+## Why low-code?
+
+API connectors follow predictable patterns. After building hundreds of them, Airbyte observed that nearly every connector solves small variations of the same problems:
+
+- Making requests to multiple endpoints under the same base URL
+- Authenticating with OAuth, API keys, or Basic HTTP
+- Paginating with limit-offset, page numbers, or cursors
+- Handling rate limiting with backoff strategies
+- Describing the schema of returned data
+- Decoding JSON, XML, CSV, or compressed responses
+- Syncing incrementally with date-based cursors
+
+The declarative framework provides configurable, off-the-shelf components for each of these problems, removing the need to write the same boilerplate over and over.
+
+## YAML manifest structure
+
+A connector manifest has four top-level sections:
+
+```yaml
+version: "0.1.0"
+
+definitions:
+  # Reusable objects referenced elsewhere in the file
+  my_authenticator:
+    type: BearerAuthenticator
+    api_token: "{{ config['api_key'] }}"
+
+streams:
+  - name: employees
+    type: DeclarativeStream
+    retriever:
+      type: SimpleRetriever
+      requester:
+        type: HttpRequester
+        url_base: "https://api.example.com"
+        path: "/employees"
+        authenticator: "*ref(definitions.my_authenticator)"
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path: ["data"]
+
+check:
+  type: CheckStream
+  stream_names: ["employees"]
+
+spec:
+  type: Spec
+  documentation_url: https://docs.example.com
+  connection_specification:
+    type: object
+    required:
+      - api_key
+    properties:
+      api_key:
+        type: string
+        title: API Key
+        airbyte_secret: true
+```
+
+| Section | Description |
+|---|---|
+| `version` | Framework version |
+| `definitions` | Reusable component definitions referenced with `*ref()` |
+| `streams` | List of stream definitions, one per API resource |
+| `check` | Which streams to use for connection validation |
+| `spec` | JSON Schema describing required user configuration |
+
+## Stream components
+
+Each stream is built from composable components:
+
+| Component | Description |
+|---|---|
+| `HttpRequester` | Base URL, path, HTTP method, auth, and request options |
+| `RecordSelector` | How to extract records from the HTTP response |
+| `DefaultPaginator` | Pagination strategy (offset, page, cursor) |
+| `DatetimeBasedCursor` | Incremental sync using a datetime cursor field |
+| `SubstreamPartitionRouter` | Iterate over records from a parent stream |
+| `ListPartitionRouter` | Iterate over a static or user-provided list of values |
+
+## Production examples
+
+These production connectors in the Airbyte repo use the Low-Code CDK and are good references:
+
+- [Greenhouse](https://github.com/airbytehq/airbyte/tree/master/airbyte-integrations/connectors/source-greenhouse/source_greenhouse/manifest.yaml)
+- [Sendgrid](https://github.com/airbytehq/airbyte/blob/master/airbyte-integrations/connectors/source-sendgrid/source_sendgrid/manifest.yaml)
+- [Sentry](https://github.com/airbytehq/airbyte/blob/master/airbyte-integrations/connectors/source-sentry/source_sentry/manifest.yaml)
+
+## Development process
+
+<Steps>
+  <Step title="Generate API credentials">
+    Obtain the API key or OAuth credentials for the source you want to connect to.
+  </Step>
+  <Step title="Set up your local environment">
+    Install [local development tools](/build-connectors/local-development): `uv`, `poe`, and Docker.
+  </Step>
+  <Step title="Write your manifest">
+    Start from the boilerplate structure above and configure streams one by one.
+  </Step>
+  <Step title="Test with Connector Builder or locally">
+    Load the manifest in the Connector Builder UI, or run `poe test-unit-tests` locally.
+  </Step>
+  <Step title="Define stream schemas">
+    Add JSON Schema files in the `schemas/` directory, or let Connector Builder auto-detect them.
+  </Step>
+  <Step title="Publish">
+    Register the connector in your Airbyte workspace and run a real sync.
+  </Step>
+</Steps>
+
+## Custom components
+
+When the built-in components don't cover your API's behavior, you can extend the framework with custom Python classes. Reference them in your YAML with a fully qualified class name:
+
+```yaml
+pagination_strategy:
+  type: CustomPaginationStrategy
+  class_name: "source_myapi.components.MyPaginationStrategy"
+  my_field: "hello world"
+```
+
+See the [Custom Components guide](/build-connectors/builder/custom-components) for implementation details.
+
+## Full schema reference
+
+The complete declarative component schema is available at:
+`https://raw.githubusercontent.com/airbytehq/airbyte-python-cdk/main/airbyte_cdk/sources/declarative/declarative_component_schema.yaml`

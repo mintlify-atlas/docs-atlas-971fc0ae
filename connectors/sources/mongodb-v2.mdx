@@ -1,0 +1,153 @@
+---
+title: MongoDB Source
+description: Replicate MongoDB collections using CDC via change streams or full refresh sync.
+---
+
+Airbyte's certified MongoDB source connector replicates collections from MongoDB using Change Data Capture (CDC) via MongoDB change streams and the replica set oplog. It supports both CDC and full refresh sync modes with checkpointing for reliable large-scale replication.
+
+## Prerequisites
+
+- A MongoDB replica set (required for CDC). [MongoDB Atlas](https://www.mongodb.com/atlas/database) clusters are replica sets by default.
+- A MongoDB user with `readAnyDatabase` access (required starting in v2.0.0 for multi-database support)
+- For Airbyte Cloud: network access from Airbyte IP addresses to your MongoDB cluster
+
+## Quick start
+
+<Steps>
+  <Step title="Create a dedicated read-only MongoDB user">
+    <Tabs>
+      <Tab title="MongoDB Atlas">
+        1. Log in to the [MongoDB Atlas dashboard](https://cloud.mongodb.com/).
+        2. Go to **Security** > **Database Access** and click **+ ADD NEW DATABASE USER**.
+        3. Choose **Password** as the authentication method and set a username and password.
+        4. Under **Database User Privileges**, select **Only read any database** as the built-in role.
+        5. Under **Specific Privileges**, add `readAnyDatabase`.
+        6. Restrict access to the specific cluster(s) you want to replicate and click **Add User**.
+      </Tab>
+      <Tab title="Self-hosted">
+        Launch the MongoDB shell and create a read-only user:
+
+        ```shell
+        use admin
+        db.createUser({
+          user: "READ_ONLY_USER",
+          pwd: "READ_ONLY_PASSWORD",
+          roles: [{ role: "read", db: "TARGET_DATABASE" }]
+        })
+        ```
+
+        Then enable authentication in `/etc/mongodb.conf`:
+
+        ```yaml
+        net:
+          bindIp: 0.0.0.0
+        security:
+          authorization: enabled
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+  <Step title="Find your MongoDB connection string">
+    <Tabs>
+      <Tab title="MongoDB Atlas">
+        1. In the Atlas dashboard, click **Connect** on your cluster.
+        2. Select **Shell** under **Access your data through tools**.
+        3. Copy the connection string (without quotes).
+      </Tab>
+      <Tab title="Self-hosted">
+        Refer to the [MongoDB connection string documentation](https://www.mongodb.com/docs/manual/reference/connection-string/#find-your-self-hosted-deployment-s-connection-string).
+      </Tab>
+    </Tabs>
+  </Step>
+  <Step title="Set up the MongoDB source in Airbyte">
+    1. In Airbyte, go to **Sources** > **+ New source** and select **MongoDB V2**.
+    2. Select the cluster type (**Atlas** or **Self-hosted replica set**).
+    3. Enter the connection string, database names, username, and password.
+    4. Configure schema enforcement (enabled by default).
+    5. Click **Set up source**.
+  </Step>
+</Steps>
+
+## Replication methods
+
+### CDC (Change Data Capture)
+
+The default replication method. Airbyte uses [MongoDB change streams](https://www.mongodb.com/docs/manual/changeStreams/) backed by the replica set oplog to incrementally capture inserts, updates, and deletes.
+
+CDC supports monitoring the entire MongoDB cluster across multiple databases from a single source.
+
+### Full refresh
+
+Full refresh reads the entire contents of a collection on every sync. The connector uses checkpointing during full refresh reads, so a sync interrupted by a network error can resume from the last checkpoint rather than starting over.
+
+## Schema enforcement
+
+**Schema enforced (default)**: The connector samples a configurable number of documents (default: 10,000) to discover the collection schema. It creates a fixed set of fields to sync. You can deselect specific fields in the Airbyte UI.
+
+**Schema not enforced**: Collections are read in schema-less mode. Each document generates a record with two fields:
+
+```json
+{
+  "_id": "<document id>",
+  "data": { "<all fields from the document>" }
+}
+```
+
+In schema-less mode, the same field can have different types across documents, and you cannot deselect individual fields.
+
+## Array type normalization
+
+In schema-enforced mode, if the schema expects an array but a document contains a single object for that field, the connector automatically wraps the object in an array to prevent NULL values at the destination:
+
+```json
+// Before normalization
+{ "reviews": { "rating": "A" } }
+
+// After normalization
+{ "reviews": [{ "rating": "A" }] }
+```
+
+## Supported sync modes
+
+| Mode | Supported |
+|------|-----------|
+| Full Refresh | Yes |
+| Incremental (CDC) | Yes |
+
+## Configuration reference
+
+<ParamField path="cluster_type" type="string" required>
+  MongoDB cluster type: `ATLAS_REPLICA_SET` or `SELF_MANAGED_REPLICA_SET`.
+</ParamField>
+
+<ParamField path="connection_string" type="string" required>
+  The MongoDB connection string for the cluster.
+</ParamField>
+
+<ParamField path="database" type="string">
+  The database name(s) to sync. Starting in v2.0.0, multiple databases are supported.
+</ParamField>
+
+<ParamField path="username" type="string">
+  The username to authenticate with (required for Atlas clusters).
+</ParamField>
+
+<ParamField path="password" type="string">
+  The password to authenticate with (required for Atlas clusters).
+</ParamField>
+
+<ParamField path="auth_source" type="string">
+  (Atlas only) The database used for credential validation. Default: `admin`.
+</ParamField>
+
+<ParamField path="schema_enforced" type="boolean">
+  Whether to enforce a schema discovered by sampling documents. Default: `true`.
+</ParamField>
+
+<ParamField path="discovery_sample_size" type="integer">
+  Number of documents to sample for schema discovery. Range: 1,000–100,000. Default: 10,000.
+</ParamField>
+
+<ParamField path="update_capture_mode" type="string">
+  How Airbyte retrieves the value of updated documents: `Lookup` (default) or `Post image` (MongoDB 6.0+ only).
+</ParamField>

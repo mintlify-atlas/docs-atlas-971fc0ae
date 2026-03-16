@@ -1,0 +1,168 @@
+---
+title: "Partitioning"
+description: "Iterate over sub-resources like projects, accounts, or surveys using partition routers in Connector Builder."
+---
+
+Partitioning is required when an API groups records into subsets that must be queried with different parameter values. For example, to fetch all order notes in a WooCommerce store, you must request `/orders/{order_id}/notes` for each order individually.
+
+Configure partitioning in the stream's **Partition Router** section. You can add multiple routers to a single stream.
+
+<Note>
+Don't use partitioning for pagination (use the Pagination feature) or for time-based incremental sync (use the Incremental Sync feature). Partitioning is specifically for when different parameter values give access to different subsets of the same logical data.
+</Note>
+
+## Partition router types
+
+### List Partition Router
+
+Use this when you have a known list of values to iterate over — either hardcoded in the connector or provided by the user.
+
+<Tabs>
+  <Tab title="Static list">
+    Hardcode a list of IDs or categories in the connector configuration.
+
+    **Example — SurveySparrow responses by survey ID:**
+
+    | Field | Value |
+    |---|---|
+    | Partition Values | `["123", "456", "789"]` |
+    | Current Partition Value Identifier | `survey` |
+    | Inject into | `request_parameter`, field name `survey_id` |
+
+    This generates:
+    ```
+    GET https://api.surveysparrow.com/v3/responses?survey_id=123
+    GET https://api.surveysparrow.com/v3/responses?survey_id=456
+    GET https://api.surveysparrow.com/v3/responses?survey_id=789
+    ```
+  </Tab>
+  <Tab title="User input">
+    Let the user specify which values to iterate over when configuring the Source.
+
+    | Field | Value |
+    |---|---|
+    | Partition Values | `{{ config['survey_ids'] }}` |
+    | Current Partition Value Identifier | `survey` |
+    | Inject into | `request_parameter`, field name `survey_id` |
+
+    Create a user input of type `array` named `survey_ids` so users can provide the IDs they want to sync.
+  </Tab>
+</Tabs>
+
+### Substream Partition Router
+
+Use this when partition values come from records of another stream. This establishes a parent-child relationship.
+
+**Example — WooCommerce order notes:**
+
+| Field | Value |
+|---|---|
+| Parent Stream | `orders` |
+| Parent Key | `id` |
+| Partition Field | `order_id` |
+| URL Path | `/orders/{{ stream_partition.order_id }}/notes` |
+
+For each order in the `orders` stream, the connector fetches the corresponding notes. Pagination and incremental sync work normally within each partition.
+
+**Advanced substream options:**
+
+| Option | Description |
+|---|---|
+| Incremental Dependency | Read the parent stream incrementally based on child stream state updates |
+| Extra Fields | Include additional fields from parent records in stream slices (e.g. `[["name"], ["category", "type"]]`) |
+| Lazy Read Pointer | Extract child records during initial parent record processing |
+
+### Grouping Partition Router
+
+Batch multiple partition values into a single request when the API accepts multiple values at once.
+
+| Field | Description |
+|---|---|
+| Group Size | Number of partitions per request |
+| Underlying Partition Router | The base router to group (any other type) |
+| Deduplicate Partitions | Remove duplicates within each group |
+
+<Note>
+Per-partition incremental sync may not work as expected with grouping because partition groupings can change between syncs.
+</Note>
+
+### Custom Partition Router
+
+For complex partitioning that requires Python code:
+
+```python
+# source_myapi/components.py
+from airbyte_cdk.sources.declarative.partition_routers import PartitionRouter
+from dataclasses import dataclass
+from typing import Any, Iterable, Mapping
+
+@dataclass
+class MyPartitionRouter(PartitionRouter):
+    config: Mapping[str, Any]
+    parameters: dict
+
+    def stream_slices(self) -> Iterable[Mapping[str, Any]]:
+        # Fetch partition values from an external source or compute them
+        for region in self.config["regions"]:
+            yield {"region": region}
+```
+
+Reference it in YAML mode:
+
+```yaml
+partition_router:
+  type: CustomPartitionRouter
+  class_name: source_myapi.components.MyPartitionRouter
+```
+
+## Multiple partition routers
+
+Combine routers on a single stream to iterate over all combinations of partition values.
+
+**Example — Google PageSpeed API (URL × strategy):**
+
+```yaml
+partition_router:
+  - type: ListPartitionRouter
+    values: ["example.com", "example.org"]
+    cursor_field: url
+    request_option:
+      type: RequestOption
+      inject_into: request_parameter
+      field_name: url
+  - type: ListPartitionRouter
+    values: ["desktop", "mobile"]
+    cursor_field: strategy
+    request_option:
+      type: RequestOption
+      inject_into: request_parameter
+      field_name: strategy
+```
+
+This generates all four combinations:
+
+```
+GET .../runPagespeed?url=example.com&strategy=desktop
+GET .../runPagespeed?url=example.com&strategy=mobile
+GET .../runPagespeed?url=example.org&strategy=desktop
+GET .../runPagespeed?url=example.org&strategy=mobile
+```
+
+## Adding partition values to records
+
+To include the partition value in each emitted record, add an **Add field** transformation:
+
+1. Set the partition field identifier (e.g. `order_id`)
+2. Add a transformation: type `add`, path `order_id`, value `{{ stream_partition.order_id }}`
+
+This is useful for downstream joins and auditing.
+
+## Custom parameter injection
+
+For complex injection requirements, disable standard injection on the partition router and configure parameters in the stream's parameter section:
+
+```
+{{ stream_partition.survey_id }}
+```
+
+You have access to `stream_partition.your_field` anywhere in the stream configuration once you set the partition field identifier.

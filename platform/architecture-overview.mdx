@@ -1,0 +1,82 @@
+---
+title: "Architecture Overview"
+description: "A high-level view of Airbyte's platform components and how they interact"
+---
+
+# Architecture overview
+
+Airbyte is composed of two major parts: the **platform** and **connectors**.
+
+The platform provides all the horizontal services required to configure and run data movement operations — the UI, configuration API, job scheduling, logging, alerting, etc. It is structured as a set of microservices.
+
+Connectors are independent modules that push/pull data to/from sources and destinations. Connectors are built in accordance with the [Airbyte Protocol](/platform/airbyte-protocol), which defines the interface for moving data. Each connector is packaged as a Docker image, allowing total flexibility over implementation technology.
+
+## Platform components
+
+<CardGroup cols={2}>
+  <Card title="Config API Server" icon="server">
+    Airbyte's main controller and web UI host. All operations — creating sources, destinations, connections, and managing configurations — are invoked through the API (`airbyte-server`, `airbyte-server-api`)
+  </Card>
+  <Card title="Database" icon="database">
+    Stores all configuration (credentials, sync frequency) and job history (`airbyte-db`, PostgreSQL)
+  </Card>
+  <Card title="Temporal Scheduler" icon="clock">
+    Manages scheduling and sequencing of task queues and workflows (`airbyte-temporal`)
+  </Card>
+  <Card title="Workers" icon="microchip">
+    Read from task queues and execute connection scheduling and sequencing logic, making calls to the Workload API (`airbyte-worker`)
+  </Card>
+  <Card title="Workload API Server" icon="network-wired">
+    HTTP interface for enqueuing workloads — the discrete pods that run connector operations (`airbyte-workload-api-server`)
+  </Card>
+  <Card title="Launcher" icon="rocket">
+    Consumes events from the Workload API and interfaces with Kubernetes to launch workload pods (`airbyte-workload-launcher`)
+  </Card>
+</CardGroup>
+
+### Additional components
+
+- **Cron** (`airbyte-cron`): Cleans server and sync logs. Regularly updates connector definitions and sweeps old workloads.
+- **Bootloader** (`airbyte-bootloader`): Upgrades and migrates database tables, and confirms the environment is ready.
+
+## Data flow
+
+When a sync is triggered:
+
+1. The **Config API Server** receives the request and creates a workflow in **Temporal**
+2. **Temporal** schedules the task and assigns it to a **Worker**
+3. The **Worker** creates a workload via the **Workload API Server**
+4. The workload is queued and consumed by the **Launcher**
+5. The **Launcher** spins up a Kubernetes pod containing the source and destination connectors
+6. The source connector reads data, the destination connector writes it
+7. The pod reports status back to the Workload API
+
+## Kubernetes architecture
+
+Airbyte is designed to run on Kubernetes. Each connector operation runs in its own pod:
+
+<Tabs>
+  <Tab title="Replication (Sync) pods">
+    A replication pod contains:
+    - **Source connector container** — executes `READ` to extract data
+    - **Destination connector container** — executes `WRITE` to load data
+    - **Container Orchestrator** — middleware that sits between source and destination; handles PII scrubbing, stats aggregation, checkpointing, logging, and auth token refresh
+  </Tab>
+  <Tab title="Connector Job pods">
+    A connector job pod contains:
+    - **Connector container** — executes `CHECK`, `DISCOVER`, or `SPEC`
+    - **Connector Sidecar** — reads connector output, interprets results, and handles side effects like logging
+  </Tab>
+</Tabs>
+
+## Scalability
+
+Airbyte's Workload architecture decouples job scheduling from job execution. Jobs remain queued until resources are available, enabling:
+
+- Configurable concurrency via `MAX_CHECK_WORKERS` and `MAX_SYNC_WORKERS`
+- Better back-pressure in resource-constrained environments
+- Self-healing behavior when resources are temporarily unavailable
+
+<Info>
+For details on configuring jobs and workloads, see the [Jobs](/platform/jobs) documentation.
+</Info>

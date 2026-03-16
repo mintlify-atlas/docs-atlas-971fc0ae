@@ -1,0 +1,255 @@
+---
+title: "Record Processing"
+description: "Decode API responses, extract records, transform fields, and declare schemas in Connector Builder."
+---
+
+After your connector makes an HTTP request, it must turn the response into records that Airbyte can deliver to a destination. This involves four steps:
+
+1. **Decode** the response body into normalized JSON
+2. **Select** the records from the JSON structure
+3. **Transform** fields (optional)
+4. **Declare metadata** — primary key and schema
+
+## Response decoding
+
+Set the **HTTP Response Format** to match what the API returns.
+
+<Tabs>
+  <Tab title="JSON">
+    The most common format. APIs typically include `Content-Type: application/json`.
+
+    ```json
+    {
+      "cnt": 40,
+      "list": [
+        {"dt": 1728604800, "main": {"temp": 283.51}},
+        {"dt": 1728615600, "main": {"temp": 283.55}}
+      ]
+    }
+    ```
+
+    No extra decoding is needed — JSON responses are already in the expected format.
+  </Tab>
+  <Tab title="XML">
+    APIs with `Content-Type: application/xml`. The connector converts XML to normalized JSON following the [xml.com spec](https://www.xml.com/pub/a/2006/05/31/converting-between-xml-and-json.html).
+
+    XML attributes become keys prefixed with `@`:
+
+    ```xml
+    <sun rise="2024-10-11T05:52:02" set="2024-10-11T17:02:14"></sun>
+    ```
+
+    Becomes:
+
+    ```json
+    {"sun": {"@rise": "2024-10-11T05:52:02", "@set": "2024-10-11T17:02:14"}}
+    ```
+  </Tab>
+  <Tab title="JSON Lines">
+    One JSON object per line (no standard Content-Type — APIs often use `text/plain`):
+
+    ```json
+    {"name": "John", "age": 30}
+    {"name": "Alice", "age": 25}
+    ```
+
+    Each line becomes a separate record.
+  </Tab>
+  <Tab title="CSV">
+    Comma-separated values. The first row is treated as column headers:
+
+    ```csv
+    id,name,email
+    1,John Doe,john@example.com
+    2,Jane Smith,jane@example.com
+    ```
+
+    Becomes JSON objects with the header fields as keys. You can change the delimiter for non-comma-separated files.
+  </Tab>
+  <Tab title="ZIP / gzip">
+    For compressed responses (common in reporting APIs like [Amplitude Export](https://amplitude.com/docs/apis/analytics/export)). Nest another decoder inside the ZIP/gzip decoder. You can nest multiple layers for files like `.zip` containing `.gz` files.
+  </Tab>
+</Tabs>
+
+## Record selection
+
+After decoding, use the **Field Path** to point to the part of the response that contains records.
+
+<Accordion title="Top-level key pointing to an array (most common)">
+```json
+{"status": "OK", "results": [{"id": 1}, {"id": 2}]}
+```
+
+Set **Field Path** to `results`.
+</Accordion>
+
+<Accordion title="Nested array">
+```json
+{"response": {"docs": [{"id": 1}, {"id": 2}]}}
+```
+
+Set **Field Path** to `response`, `docs`.
+</Accordion>
+
+<Accordion title="Root array (no wrapper)">
+```json
+[{"id": 1}, {"id": 2}]
+```
+
+Leave **Field Path** empty — the entire response is the list of records.
+</Accordion>
+
+<Accordion title="Single object">
+```json
+{"rates": {"USD": 1.636, "EUR": 1.196}}
+```
+
+Set **Field Path** to `rates`. The single object becomes one record.
+</Accordion>
+
+<Accordion title="Fields nested within array items">
+```json
+{"data": [{"record": {"id": "1"}}, {"record": {"id": "2"}}]}
+```
+
+Set **Field Path** to `data`, `*`, `record`. The `*` selects all items in the array.
+</Accordion>
+
+### Record filter
+
+Exclude records based on field values using a Jinja expression. Only records where the expression evaluates to `true` are emitted:
+
+```
+{{ record.status != 'expired' }}
+{{ record.status in ['active', 'pending'] }}
+{{ record['created_at'] >= stream_interval['start_time'] }}
+{{ record['priority'] > config['min_priority'] }}
+{{ record.get('email') is not none }}
+```
+
+**Available variables:**
+- `record` — current record
+- `config` — connector configuration
+- `stream_interval` — time interval for incremental syncs
+- `stream_partition` — current partition
+- `next_page_token` — pagination context
+
+### Cast record fields to schema types
+
+Enable **Cast Record Fields to Schema Types** to coerce field values to the types declared in the schema. For example, if the API returns latitude as a string `"-37.3159"` but you want a number, declare `lat` as `number` in the schema and enable this option.
+
+Casting is best-effort: strings that can't be parsed as numbers remain unchanged.
+
+**Schema normalization options:**
+- `Default` — cast fields to declared types
+- `None` — pass records through without type conversion
+
+## Transformations
+
+Transformations modify records before they are emitted. Use them sparingly — it's generally better to transform data in the destination where you have more flexibility.
+
+Legitimate uses:
+- Remove PII fields for compliance
+- Pseudonymize sensitive fields with a hash
+- Drop large fields that waste bandwidth
+
+### Removing fields
+
+Add a **Remove** transformation and specify the field path.
+
+```json
+// Before: EmailOctopus campaign record
+{
+  "id": "00000000-...",
+  "name": "Foo",
+  "content": {"html": "<html>lots of content...", "plain_text": "..."}
+}
+
+// After: path = "content"
+{
+  "id": "00000000-...",
+  "name": "Foo"
+}
+```
+
+Use `**` to remove a field at any nesting level:
+- Path `**, name` removes all `name` fields everywhere in the record
+- Path `s*` removes all top-level fields starting with `s`
+
+### Adding fields
+
+Add an **Add** transformation to compute a new field value, including hashing for pseudonymization:
+
+```
+// Path: from, name
+// Value: {{ record['from']['name'] | hash('md5') }}
+```
+
+This replaces the sender's name with its MD5 hash:
+
+```json
+// Before
+{"from": {"name": "John Doe", "email_address": "john@example.com"}}
+
+// After
+{"from": {"name": "4c2a904bafba06591225113ad17b5cec", "email_address": "john@example.com"}}
+```
+
+### Transform before filtering
+
+The `transform_before_filtering` option controls execution order:
+- `false` (default) — filter first, then transform (more efficient when many records are filtered)
+- `true` — transform first, then filter (required when the filter condition references a transformed field)
+
+## Metadata
+
+### Primary key
+
+Set the **Primary key** to the field (or fields) that uniquely identifies a record. This enables downstream deduplication in [Incremental Append + Deduped](/using-airbyte/sync-modes) sync mode.
+
+For composite keys (when no single field is unique), provide multiple field names:
+
+```json
+// WooCommerce shipping zone locations: composite key (code, type)
+[{"code": "BR", "type": "country"}, {"code": "DE", "type": "country"}]
+```
+
+Set Primary key to `code`, `type`.
+
+### Declared schema
+
+The **Declared Schema** is a JSON Schema definition that describes your stream's fields and types. Airbyte uses it for:
+
+- Column selection when configuring a connection
+- Creating properly typed tables in destination warehouses
+- Detecting schema changes between syncs
+
+By default, Connector Builder **auto-imports the schema** detected from test records. Disable `Automatically import detected schema` to maintain a manually edited schema.
+
+**Reading schema diffs:** The **Detected schema** tab in the testing panel highlights differences between the declared and detected schemas. Not all differences are problems:
+
+```diff
+  "name": {
+-   "type": ["string", "null"]
++   "type": "null"
+  }
+```
+
+This means the declared schema allows `null` but the detected schema only saw strings. If `name` can be null, the declared schema is correct.
+
+```diff
+  "subject": {
+-   "type": "number"
++   "type": "string"
+  }
+```
+
+This is a real problem: the API returned strings during testing but the schema declares a number. Update the declared schema to `"type": "string"` or `"type": ["string", "number"]` if both types are possible.
+
+### Variable schemas
+
+Some APIs (CRMs with custom fields, multi-tenant platforms) return different fields per account. Approaches:
+
+**Metadata endpoint (preferred):** If the API has a `GET /fields` or `GET /properties` endpoint, switch to YAML mode and use a `DynamicSchemaLoader` component to build the schema at discover time.
+
+**Auto-detected schema (fallback):** Enable `Automatically import detected schema`. During connector development, test with a representative account. Airbyte's [schema change management](/using-airbyte/schema-change-management) handles field drift over time — propagating new fields automatically or flagging them for review depending on your connection settings.

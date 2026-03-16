@@ -1,0 +1,98 @@
+---
+title: "Organizations and Workspaces"
+description: "Structure your Airbyte deployment with organizations and workspaces for data isolation and access control"
+---
+
+# Organizations and workspaces
+
+Organizations and workspaces are the primary structures for segregating data, managing access, and controlling billing in Airbyte.
+
+## Overview
+
+<CardGroup cols={2}>
+  <Card title="Organization" icon="building">
+    The top-level entity. Contains one or more workspaces, manages billing, SSO configuration, and organization-level user roles.
+  </Card>
+  <Card title="Workspace" icon="folder">
+    Contains connections, sources, and destinations. Users have workspace-specific roles that can override their organization role.
+  </Card>
+</CardGroup>
+
+## Plan availability
+
+| Feature | Core | Cloud Standard | Cloud Teams | Enterprise |
+|---------|:----:|:-------------:|:-----------:|:----------:|
+| Multiple workspaces | | | ✓ | ✓ |
+| Multiple organizations | | | | ✓ |
+| RBAC | | | ✓ | ✓ |
+| SSO | | | | ✓ |
+
+<Note>
+If you use Airbyte Core (OSS), you have one organization and one workspace. Organizations and workspaces aren't configurable in that mode.
+</Note>
+
+## Workspaces
+
+A workspace is an isolated environment containing:
+
+- **Sources** — configured data source connections
+- **Destinations** — configured destination connections
+- **Connections** — sync pipelines between sources and destinations
+- **Settings** — data residency, notifications, connector versions
+
+### Creating a workspace
+
+<Steps>
+  <Step title="Navigate to workspaces">
+    In the Airbyte UI, click your organization name in the navigation bar and select **Workspaces**.
+  </Step>
+  <Step title="Create new workspace">
+    Click **New workspace** and enter a name.
+  </Step>
+  <Step title="Configure settings">
+    Set data residency, notification preferences, and invite members.
+  </Step>
+</Steps>
+
+### Data residency
+
+Each workspace can be configured with a specific data residency (Cloud only). This determines which geographic region processes and temporarily stores sync data.
+
+## Organizations
+
+An organization is the top-level container that:
+
+- Groups workspaces together
+- Manages billing and subscription
+- Configures SSO for all workspaces
+- Controls organization-level user access
+
+### Organization settings
+
+Organization Admins can configure:
+
+- **Billing** — Manage subscription and payment methods
+- **SSO** — Configure SAML/OIDC single sign-on
+- **Members** — Invite users and assign organization roles
+- **Workspaces** — Create and delete workspaces
+
+## User management
+
+Users can have different roles at the organization and workspace levels. See [Access Management](/platform/access-management) for the full roles and permissions reference.
+
+### Inviting users
+
+<Steps>
+  <Step title="Go to Members">
+    Navigate to **Organization settings** or **Workspace settings** > **Members**.
+  </Step>
+  <Step title="Invite user">
+    Click **Invite user** and enter their email address.
+  </Step>
+  <Step title="Assign role">
+    Select the appropriate organization or workspace role.
+  </Step>
+  <Step title="User accepts invitation">
+    The invited user receives an email and can accept the invitation to join.
+  </Step>
+</Steps>

@@ -1,0 +1,100 @@
+---
+title: Core concepts
+description: The essential concepts you need to understand to use Airbyte effectively.
+---
+
+Airbyte enables you to build data pipelines that replicate data from a source to a destination. You can configure how frequently the data is synced, what data is replicated, and how data is written in the destination.
+
+## Source
+
+A source is an API, file, database, or data warehouse you want to ingest data from. When you configure a source, you provide the variables the connector needs to access records — typically authentication information (username/password, API key) and configuration details like a start date or search query.
+
+## Destination
+
+A destination is a data warehouse, data lake, database, or analytics tool where you want to load your ingested data.
+
+## Connector
+
+An Airbyte component that pulls data from a source or pushes data to a destination. A connector defines everything needed to access an API or database: the protocol, URL paths, how to structure requests, and how to extract records from responses.
+
+## Connection
+
+A connection is an automated data pipeline that replicates data from a source to a destination. It links a configured source to a configured destination and defines things like replication frequency and which streams to replicate.
+
+| Setting | Description |
+| --- | --- |
+| [Stream and field selection](/using-airbyte/set-up-a-connection) | What data to replicate from the source |
+| [Sync mode](/using-airbyte/sync-modes) | How streams should be read and written |
+| [Sync schedule](/using-airbyte/sync-schedules) | When a sync should be triggered |
+| [Destination namespace](/using-airbyte/namespaces) | Where replicated data should be written |
+| [Schema propagation](/using-airbyte/schema-change-management) | How Airbyte handles schema drift |
+
+## Stream
+
+A stream is a group of related records. Depending on the destination, it may be called a table, file, or blob. Airbyte uses the term "stream" to generalize data flow across various destination types.
+
+Examples:
+- A table in a relational database
+- A resource or API endpoint in a REST API
+- Records from a directory of files in a filesystem
+
+## Record
+
+A record is a single entry or unit of data — commonly known as a "row". Records are usually unique and contain information about a particular entity, such as a customer or transaction.
+
+Examples:
+- A row in a relational database table
+- A line in a file
+- A unit of data returned from an API
+
+## Field
+
+A field is an attribute of a record within a stream.
+
+Examples:
+- A column in a relational database table
+- A field in an API response
+
+## Sync schedule
+
+You can trigger syncs in three ways:
+
+- **Scheduled** — run at a fixed interval (every 1, 2, 3, 6, 8, 12, or 24 hours)
+- **Cron** — run based on a custom [cron expression](https://www.quartz-scheduler.org/documentation/quartz-2.3.0/tutorials/crontrigger.html)
+- **Manual** — run only when you click **Sync Now** or trigger via API
+
+See [Sync schedules](/using-airbyte/sync-schedules) for full details.
+
+## Namespace
+
+A namespace defines where data is written in your destination. It is typically a schema in a relational database. Depending on the destination, you may know this as a "Dataset", "Schema", or "Bucket Path".
+
+See [Namespaces](/using-airbyte/namespaces) for full details.
+
+## Sync mode
+
+A sync mode governs how Airbyte reads from a source and writes to a destination. The mode determines whether records are appended, overwritten, or deduplicated.
+
+See [Sync modes](/using-airbyte/sync-modes) for full details.
+
+## Typing and deduping
+
+Typing and deduping ensures that data from sources is written into correctly type-cast relational columns in the destination. When deduplication is enabled, the destination contains only unique records per primary key. This applies to relational database and warehouse destinations.
+
+See [Typing and deduplication](/using-airbyte/typing-deduplication) for full details.
+
+## Resumability
+
+Resuming syncs is an important part of Airbyte's reliability model. Airbyte checkpoints sync progress and automatically re-attempts syncs under the hood so your pipelines keep running with minimal manual intervention.
+
+## Custom transformations
+
+Airbyte Cloud integrates natively with dbt, allowing you to trigger dbt models after a sync completes. Custom transformations are not available for Airbyte Open Source.
+
+## Workspace
+
+A workspace is a grouping of sources, destinations, connections, and other configurations. It lets you collaborate with team members and share resources under a shared billing account.
+
+## Organization
+
+Organizations let you collaborate with team members and share workspaces across your team.

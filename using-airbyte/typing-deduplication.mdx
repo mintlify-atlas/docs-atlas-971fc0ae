@@ -1,0 +1,124 @@
+---
+title: Typing and deduplication
+description: How Airbyte transforms raw data into correctly typed, deduplicated tables in your destination warehouse.
+---
+
+<Warning>
+Typing and deduplication is being phased out in favor of [Direct-Load tables](/using-airbyte/core-concepts). With Direct-Load, there is no intermediate raw JSON table — top-level fields are typed at insert time, and a single destination table is maintained per stream.
+</Warning>
+
+Typing and deduplication is the default method Airbyte uses to transform raw replicated data into clean, correctly typed relational tables in database and warehouse destinations. It is part of [Destinations V2](/platform/typing-deduplication).
+
+## What Destinations V2 provides
+
+Destinations V2 introduces several improvements over legacy normalization:
+
+- **One-to-one table mapping** — Each stream maps to exactly one table in your destination. No more sub-tables from nested objects.
+- **Per-row error handling with `_airbyte_meta`** — Typing errors are recorded in the `_airbyte_meta` column instead of failing the entire sync. You can query this column to audit rows with data quality issues.
+- **Raw tables in a dedicated schema** — All raw tables are written to the `airbyte_internal` schema, keeping your working schema clean.
+- **Incremental delivery for large syncs** — Data is incrementally written to final tables during the sync, so you don't have to wait for the full sync to complete before seeing rows.
+
+## Per-row change handling with `_airbyte_meta`
+
+Destinations V2 separates data-moving problems from data-content problems.
+
+- A **failing sync** means Airbyte could not move all of your data (a pipeline error).
+- A **row with changes** in `_airbyte_meta` means Airbyte moved the data but encountered a content issue for that row.
+
+You can query `_airbyte_meta` to identify rows with issues and decide how to handle them case by case.
+
+The types of changes recorded in `_airbyte_meta.changes`:
+
+- **Typing changes** — The source declared a field as an integer but returned a string value. The field is nulled in the destination.
+- **Size changes** — The source returned data that exceeds the destination's storage limits (for example, [Redshift's 16 MB Super column limit](https://docs.aws.amazon.com/redshift/latest/dg/limitations-super.html)). The record is retained with primary key and cursor fields, but oversized data is trimmed.
+
+<Tip>
+When querying data downstream from Airbyte, include only rows with no recorded changes:
+
+```sql
+-- postgres syntax
+SELECT COUNT(*) FROM _table_ WHERE json_array_length(_airbyte_meta ->> 'changes') = 0
+```
+
+For some aggregations — such as counting new records by date — rows with changes may still be valid, even if some field content is incomplete.
+</Tip>
+
+## Example: how data is structured
+
+Consider the following source schema for a stream called `users`:
+
+```json
+{
+  "id": "number",
+  "first_name": "string",
+  "age": "number",
+  "address": {
+    "city": "string",
+    "zip": "string"
+  }
+}
+```
+
+### Final table: `public.users`
+
+| `_airbyte_raw_id` | `_airbyte_extracted_at` | `_airbyte_meta` | `id` | `first_name` | `age` | `address` |
+| --- | --- | --- | --- | --- | --- | --- |
+| xxx-xxx-xxx | 2022-01-01 12:00:00 | `{}` | 1 | sarah | 39 | `{city: "San Francisco", zip: "94131"}` |
+| yyy-yyy-yyy | 2022-01-01 12:00:00 | `{changes: [{"field": "age", "change": "NULLED", "reason": "DESTINATION_TYPECAST_ERROR"}]}` | 2 | evan | NULL | `{city: "Menlo Park", zip: "94002"}` |
+
+The second row has a typing error: `age` was returned as `"fish"` (a string) but the declared type is `number`. The row is still written to the destination; `age` is nulled and the issue is recorded in `_airbyte_meta`.
+
+### Raw table: `airbyte_internal.raw_public__users`
+
+The raw table stores the original JSON payload before typing is applied:
+
+| `_airbyte_raw_id` | `_airbyte_data` | `_airbyte_loaded_at` | `_airbyte_extracted_at` |
+| --- | --- | --- | --- |
+| xxx-xxx-xxx | `{id: 1, first_name: "sarah", age: 39, ...}` | 2022-01-01 12:00:00 | 2022-01-01 12:00:00 |
+| yyy-yyy-yyy | `{id: 2, first_name: "evan", age: "fish", ...}` | 2022-01-01 12:00:00 | 2022-01-01 12:00:00 |
+| zzz-zzz-zzz | `{id: 3, first_name: "edward", age: 35, ...}` | NULL | 2022-01-01 13:00:00 |
+
+The third row has `_airbyte_loaded_at = NULL`, indicating it has been extracted but not yet typed into the final table.
+
+<Note>
+In legacy normalization, `Object`-type columns were "unnested" into separate sub-tables. With Destinations V2, nested objects like `address` remain as a single column in the final table. The `public.users_address` sub-table is no longer generated.
+</Note>
+
+## Final table re-creation
+
+Occasionally, Airbyte drops and re-creates the final table produced by a sync (a "soft reset"). This happens for reasons including:
+
+- **Schema migrations** — Many destinations cannot reorder columns or change column types in place. Re-creating the table lets Airbyte control column order and types precisely.
+- **Transactional full refresh** — When a refresh or reset occurs, Airbyte builds a new temporary final table first, then performs an atomic swap to replace the old table. This keeps your data available during the operation.
+
+<Warning>
+Any permissions, constraints, views, or other rules you apply to the final table outside of Airbyte may be lost when the table is re-created. Use role-based or wildcard permissions where possible, and avoid altering the final tables directly.
+</Warning>
+
+### Manually trigger a final table re-creation
+
+If you need to manually restore the final table (for example, after accidentally deleting records), run the following steps:
+
+1. Drop the final table:
+
+   ```sql
+   DROP TABLE <your_final_table>
+   ```
+
+2. Clear the `_airbyte_loaded_at` column in the raw table so Airbyte re-processes all rows:
+
+   ```sql
+   UPDATE airbyte_internal.<your_raw_table> SET _airbyte_loaded_at = NULL
+   ```
+
+   If you use a non-default raw table schema, replace `airbyte_internal` with that schema name.
+
+3. Run a sync. After it completes, the final table is restored to its correct state.
+
+## Incremental loading to final tables
+
+V2 destinations may include the option **Enable loading data incrementally to final tables**. When enabled, data is written to final tables progressively while the sync is running. When disabled (the default), data loads into final tables all at once at the end of the sync.
+
+<Note>
+Typing and deduplication may increase your destination's compute costs. This cost depends on the amount of data transformed and is separate from Airbyte credit usage. Enabling incremental loading to final tables may further increase this cost.
+</Note>

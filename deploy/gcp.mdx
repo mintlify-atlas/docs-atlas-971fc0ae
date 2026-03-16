@@ -1,0 +1,124 @@
+---
+title: 'Deploy on GCP'
+description: 'Service account roles and infrastructure guidance for deploying Airbyte on Google Cloud Platform.'
+---
+
+Airbyte supports Google Cloud Platform as a cloud provider. You can deploy Airbyte on Google Kubernetes Engine (GKE).
+
+## Infrastructure overview
+
+For a production-ready deployment, Airbyte recommends running all components in the same VPC:
+
+| Component | Recommendation |
+|---|---|
+| Kubernetes cluster | GKE cluster on Google Compute Engine |
+| Object storage | Google Cloud Storage bucket for log and state storage |
+| Database | GCP Cloud SQL PostgreSQL |
+| Secrets manager | Google Secret Manager for connector secrets |
+
+<Info>
+Airbyte supports GKE Autopilot, but does not support GKE on Fargate-equivalent configurations. Run Airbyte on instances with at least 2 cores and 8 GB of RAM.
+</Info>
+
+## GCP service account
+
+Installing Airbyte on GCP requires a service account. The service account must have the correct roles to access Google Cloud Storage and Google Secret Manager, depending on which integrations you use.
+
+See the [GCP documentation](https://cloud.google.com/iam/docs/service-accounts-create) for instructions on creating a service account.
+
+### Google Cloud Storage roles
+
+Assign the following roles to enable log and state storage in GCS:
+
+```text
+roles/storage.objectCreator
+roles/storage.admin
+```
+
+### Google Secret Manager roles
+
+Assign the following roles to enable connector secret storage in Google Secret Manager:
+
+```text
+roles/secretmanager.secretAccessor
+roles/secretmanager.secretVersionAdder
+roles/secretmanager.secretVersionManager
+roles/secretmanager.viewer
+```
+
+## Configure kubectl for GKE
+
+<Steps>
+  <Step title="Authenticate with gcloud">
+    ```bash
+    gcloud auth login
+    ```
+  </Step>
+  <Step title="Get cluster credentials">
+    On the Google Cloud Console, navigate to your cluster and click **Connect**. Run the command shown:
+
+    ```bash
+    gcloud container clusters get-credentials $CLUSTER_NAME \
+      --zone $ZONE_NAME \
+      --project $PROJECT_NAME
+    ```
+  </Step>
+  <Step title="Select the GKE context">
+    ```bash
+    kubectl config get-contexts
+    kubectl config use-context $GKE_CONTEXT
+    ```
+  </Step>
+</Steps>
+
+## Configure GCS storage in values.yaml
+
+After setting up your service account and Kubernetes secret containing the GCP credentials JSON, configure Airbyte to use GCS:
+
+```yaml
+global:
+  storage:
+    type: gcs
+    storageSecretName: airbyte-config-secrets
+    bucket:
+      log: airbyte-bucket
+      state: airbyte-bucket
+      workloadOutput: airbyte-bucket
+    gcs:
+      projectId: my-gcp-project-id
+      credentialsJson: /secrets/gcs-log-creds/gcp.json
+```
+
+## Configure Google Secret Manager in values.yaml
+
+By default, secrets are expected in the `gcp-cred-secrets` Kubernetes secret under a `gcp.json` key:
+
+```yaml
+secretManager:
+  type: googleSecretManager
+  storageSecretName: gcp-cred-secrets
+  googleSecretManager:
+    projectId: my-gcp-project-id
+    credentialsSecretKey: gcp.json
+```
+
+Airbyte recommends provisioning a single service account with access to both GCS and Google Secret Manager.
+
+## Create the GCP credentials secret
+
+Create a file named `gcp.json` containing the service account credentials JSON. Then create a Kubernetes secret from it:
+
+```bash
+kubectl create secret generic airbyte-config-secrets \
+  --from-file=gcp.json \
+  --namespace airbyte
+```
+
+For a full secret manifest example, see [Managing secrets](/deploy/secrets).
+
+## Next steps
+
+After setting up your GCP infrastructure and service account roles:
+
+1. [Create your Kubernetes secrets](/deploy/secrets)
+2. [Install Airbyte with Helm](/deploy/helm-kubernetes)

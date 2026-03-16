@@ -1,0 +1,231 @@
+---
+title: "Custom Components"
+description: "Extend Connector Builder with custom Python classes when built-in components aren't enough."
+---
+
+Custom Components let you override any built-in Connector Builder component with your own Python implementation. This bridges the gap between the declarative UI and the full flexibility of the Python CDK.
+
+With Custom Components you can:
+
+- Implement specialized pagination, authentication, or transformation logic
+- Handle edge-case API behaviors not covered by built-in components
+- Iteratively replace only the specific parts of your connector that need customization
+- Maintain all the Builder's testing and deployment capabilities
+
+<Warning>
+Custom Components are **experimental and unsafe**. Airbyte provides no sandboxing guarantees — this feature executes arbitrary code in your Airbyte environment. It is disabled by default and must be explicitly enabled by an administrator.
+</Warning>
+
+## Enabling Custom Components
+
+An Airbyte administrator must enable Custom Components before you can use them.
+
+<Tabs>
+  <Tab title="abctl (Helm chart V1)">
+    Add to your `values.yaml`:
+
+    ```yaml
+    workload-launcher:
+      extraEnv:
+        - name: AIRBYTE_ENABLE_UNSAFE_CODE
+          value: "true"
+    connector-builder-server:
+      extraEnv:
+        - name: AIRBYTE_ENABLE_UNSAFE_CODE
+          value: "true"
+    ```
+
+    Redeploy:
+
+    ```bash
+    abctl local install --values values.yaml
+    ```
+  </Tab>
+  <Tab title="abctl (Helm chart V2)">
+    Add to your `values.yaml`:
+
+    ```yaml
+    workloadLauncher:
+      extraEnv:
+        - name: AIRBYTE_ENABLE_UNSAFE_CODE
+          value: "true"
+    connectorBuilderServer:
+      extraEnv:
+        - name: AIRBYTE_ENABLE_UNSAFE_CODE
+          value: "true"
+    ```
+
+    Redeploy:
+
+    ```bash
+    abctl local install --values values.yaml
+    ```
+  </Tab>
+  <Tab title="Helm (V1)">
+    ```bash
+    helm upgrade airbyte airbyte-v2/airbyte \
+      --namespace airbyte \
+      --values ./values.yaml
+    ```
+
+    Where `values.yaml` contains:
+
+    ```yaml
+    workload-launcher:
+      extraEnv:
+        - name: AIRBYTE_ENABLE_UNSAFE_CODE
+          value: "true"
+    connector-builder-server:
+      extraEnv:
+        - name: AIRBYTE_ENABLE_UNSAFE_CODE
+          value: "true"
+    ```
+  </Tab>
+  <Tab title="Helm (V2)">
+    ```bash
+    helm upgrade airbyte airbyte-v2/airbyte \
+      --namespace airbyte-v2 \
+      --values ./values.yaml \
+      --version 2.x.x
+    ```
+
+    Where `values.yaml` contains:
+
+    ```yaml
+    workloadLauncher:
+      extraEnv:
+        - name: AIRBYTE_ENABLE_UNSAFE_CODE
+          value: "true"
+    connectorBuilderServer:
+      extraEnv:
+        - name: AIRBYTE_ENABLE_UNSAFE_CODE
+          value: "true"
+    ```
+  </Tab>
+</Tabs>
+
+## Implementing a custom component
+
+A custom component is a Python dataclass that implements the interface of the built-in component it replaces. Each field in the dataclass maps to a configurable argument in the YAML manifest.
+
+**Pattern:**
+
+```python
+from dataclasses import dataclass, field
+from typing import Any, List, Mapping, Optional, Union
+from airbyte_cdk.sources.declarative.interpolation import InterpolatedString
+
+@dataclass
+class MyPaginationStrategy(PaginationStrategy):
+    # Fields become configurable arguments in the YAML
+    my_field: Union[InterpolatedString, str]
+    parameters: InitVar[Mapping[str, Any]]
+
+    def __post_init__(self, parameters: Mapping[str, Any]):
+        if isinstance(self.my_field, str):
+            self.my_field = InterpolatedString.create(self.my_field, parameters=parameters)
+
+    def next_page_token(
+        self,
+        response: requests.Response,
+        last_records: List[Mapping[str, Any]],
+    ) -> Optional[Any]:
+        # Return None to stop pagination
+        pass
+
+    def reset(self) -> None:
+        pass
+
+    def get_page_size(self) -> Optional[int]:
+        return None
+```
+
+## Example: custom record transformation
+
+```python
+# source_myapi/components.py
+from dataclasses import dataclass
+from typing import Any, Iterable, Mapping
+from airbyte_cdk.sources.declarative.transformations import RecordTransformation
+from airbyte_cdk.sources.types import StreamSlice, StreamState
+
+@dataclass
+class AppendSuffixTransformation(RecordTransformation):
+    field_name: str
+    suffix: str
+
+    def transform(
+        self,
+        record: Mapping[str, Any],
+        config: Optional[Mapping[str, Any]] = None,
+        stream_state: Optional[StreamState] = None,
+        stream_slice: Optional[StreamSlice] = None,
+    ) -> None:
+        if self.field_name in record:
+            record[self.field_name] = f"{record[self.field_name]}{self.suffix}"
+```
+
+Reference it in YAML mode:
+
+```yaml
+transformations:
+  - type: CustomTransformation
+    class_name: source_myapi.components.AppendSuffixTransformation
+    field_name: name
+    suffix: " (imported)"
+```
+
+## Passing fields to child components
+
+Custom components don't automatically propagate parent fields to their child components (unlike built-in components). If you see an error like:
+
+```
+Error creating component 'DefaultPaginator' with parent custom component
+source_example.components.CustomRetriever:
+Please provide DefaultPaginator.$parameters.url_base
+```
+
+Add the missing field to the child component's `$parameters` block:
+
+```yaml
+paginator:
+  type: DefaultPaginator
+  $parameters:
+    url_base: "https://api.example.com"
+```
+
+## Configuring custom components in the Builder UI
+
+You must switch to the **YAML editor** in Connector Builder to configure custom components. The visual form interface does not support custom component configuration.
+
+<Steps>
+  <Step title="Enable Custom Components">
+    Ask your Airbyte administrator to set `AIRBYTE_ENABLE_UNSAFE_CODE=true` as described above.
+  </Step>
+  <Step title="Write your component class">
+    Create a Python file in your connector's module (e.g. `source_myapi/components.py`) and implement the interface.
+  </Step>
+  <Step title="Switch to YAML mode">
+    In Connector Builder, click the YAML toggle to switch from the visual editor to the YAML editor.
+  </Step>
+  <Step title="Reference the class">
+    In the YAML, set `type` to the custom component type and `class_name` to your fully qualified class name.
+  </Step>
+  <Step title="Test">
+    Use the Connector Builder test panel to verify the component works as expected.
+  </Step>
+</Steps>
+
+## Available component interfaces
+
+Any built-in component can be replaced. Common candidates:
+
+| Interface | Import path |
+|---|---|
+| `PaginationStrategy` | `airbyte_cdk.sources.declarative.requesters.paginators.strategies.pagination_strategy` |
+| `RecordTransformation` | `airbyte_cdk.sources.declarative.transformations` |
+| `ErrorHandler` | `airbyte_cdk.sources.streams.http.error_handlers` |
+| `PartitionRouter` | `airbyte_cdk.sources.declarative.partition_routers` |
+| `Authenticator` | `airbyte_cdk.sources.streams.http.auth` |
+
+For a complete list, see the [airbyte-python-cdk source code](https://github.com/airbytehq/airbyte-python-cdk).

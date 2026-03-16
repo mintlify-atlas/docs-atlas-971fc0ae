@@ -1,0 +1,68 @@
+---
+title: "Access Management"
+description: "Role-based access control (RBAC) for organizations and workspaces in Airbyte"
+---
+
+# Access management
+
+Airbyte uses **Role-Based Access Control (RBAC)** to manage what users can do within organizations and workspaces.
+
+<Note>
+RBAC is available on **Self-Managed Enterprise** and **Airbyte Cloud Teams** plans.
+</Note>
+
+## Organization roles
+
+Organization roles scope permissions to the entire organization, including all workspaces in that organization.
+
+| Permission | Member | Reader | Runner | Editor | Admin |
+|-----------|:------:|:------:|:------:|:------:|:-----:|
+| Read organization | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Create/delete workspaces | | | | ✓ | ✓ |
+| Update organization settings (billing, SSO, role assignment) | | | | | ✓ |
+
+## Workspace roles
+
+Workspace roles scope permissions to a specific workspace. You can grant a higher workspace role than a user's organization role, but not a lower one. For example:
+- An organization Admin must also be a workspace Admin
+- An organization Reader can be a workspace Reader, Editor, or Admin
+
+| Permission | Reader | Runner | Editor | Admin |
+|-----------|:------:|:------:|:------:|:-----:|
+| Read workspace (list/view connections, settings) | ✓ | ✓ | ✓ | ✓ |
+| Sync connections (start/cancel syncs and refreshes) | | ✓ | ✓ | ✓ |
+| Modify connector settings (create/modify/delete sources and destinations) | | | ✓ | ✓ |
+| Update connections (modify settings, clear data, create/delete connections) | | | ✓ | ✓ |
+| Update workspace settings (data residency, users, notifications, connector versions) | | | | ✓ |
+
+## Instance Admin role (Self-Managed Enterprise)
+
+Self-Managed Enterprise instances have an additional **Instance Admin** role. Airbyte assigns this role to the first user who logs in. The Instance Admin has all permissions across all workspaces and organizations in the enterprise account.
+
+<Warning>
+To update the Instance Admin assignment, contact [Airbyte support](https://support.airbyte.com).
+</Warning>
+
+## Setting roles
+
+<Steps>
+  <Step title="Navigate to Members">
+    In the navigation bar, click **Workspace settings** or **Organization settings**, then click **Members**.
+  </Step>
+  <Step title="Update the role">
+    In the members table, click the current role under **Workspace role** or **Organization role** and select the new role.
+  </Step>
+</Steps>
+
+## Best practices
+
+- Assign the **lowest level** of permission necessary at the organization level
+- Override with **higher roles** at the workspace level as needed for specific projects
+- Avoid assigning Admin roles without clear business need — Admin roles cannot be demoted
+- Use organization-level Reader roles for users who need visibility across all workspaces
+
+## Role mapping (SSO)
+
+For organizations using SSO, Airbyte supports automatic role mapping from your identity provider. Users can be assigned roles based on IdP group membership.
+
+See [SSO configuration](/platform/sso) for setup details.

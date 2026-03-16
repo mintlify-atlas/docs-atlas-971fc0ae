@@ -1,0 +1,141 @@
+---
+title: Stripe Source
+description: Replicate payments, customers, subscriptions, invoices, and more from Stripe using a restricted API key.
+---
+
+Airbyte's certified Stripe source connector replicates data from the Stripe API. It supports incremental sync via the Stripe Events API and full refresh for all major Stripe objects.
+
+## Prerequisites
+
+- Access to the Stripe account containing the data you want to replicate
+- A Stripe API key (restricted key with Read access is recommended)
+- Your Stripe Account ID (begins with `acct_`)
+
+## Setup guide
+
+<Steps>
+  <Step title="Create a restricted Stripe API key">
+    1. Log in to your [Stripe Dashboard](https://dashboard.stripe.com/login).
+    2. In the top navigation, click **Developers** > **API keys**.
+    3. Click **+ Create restricted key**.
+    4. Choose a name and select **Read** for all available permissions.
+    5. Click **Create key** and copy the key value.
+  </Step>
+  <Step title="Set up the Stripe connector in Airbyte">
+    1. In Airbyte, go to **Sources** > **+ New source** and select **Stripe**.
+    2. Enter a name for the connector.
+    3. For **Account ID**, enter your Stripe Account ID (find it in the top-right corner of your [account settings](https://dashboard.stripe.com/settings/account)).
+    4. For **Secret Key**, enter the restricted key you created.
+    5. For **Replication Start Date**, enter the date from which to replicate data in `YYYY-MM-DDTHH:mm:ssZ` format.
+    6. (Optional) Set a **Lookback Window** (number of days) to re-read data that might have been updated after its initial creation.
+    7. (Optional) Set the **Data Request Window** (days per API request). Default: 365 days. Larger values are faster but riskier to re-sync if interrupted.
+    8. (Optional) Configure **Streams with API Data Retention Validation** to enable automatic full refresh for streams whose cursor is older than 30 days.
+    9. (Optional) Set **Number of Concurrent Workers** (default: 10, range: 2–100).
+    10. Click **Set up source**.
+  </Step>
+</Steps>
+
+## Supported sync modes
+
+| Mode | Supported |
+|------|-----------|
+| Full Refresh | Yes |
+| Incremental | Yes |
+
+## Supported streams
+
+<Accordion title="Financial streams">
+  - `balance_transactions` (Incremental)
+  - `charges` (Incremental)
+  - `credit_notes` (Incremental)
+  - `disputes` (Incremental)
+  - `payment_intents` (Incremental)
+  - `payouts` (Incremental)
+  - `payout_balance_transactions` (Incremental)
+  - `refunds` (Incremental)
+  - `top_ups` (Incremental)
+  - `transfers` / `transfer_reversals` (Incremental)
+</Accordion>
+
+<Accordion title="Customer & subscription streams">
+  - `customers` (Incremental)
+  - `customer_balance_transactions` (Incremental)
+  - `subscriptions` (Incremental)
+  - `subscription_items` (Incremental)
+  - `subscription_schedule` (Incremental)
+  - `invoices` (Incremental)
+  - `invoice_items` (Incremental)
+  - `invoice_line_items` (Incremental)
+  - `plans` (Incremental)
+  - `prices` (Incremental)
+  - `products` (Incremental)
+  - `coupons` (Incremental)
+  - `promotion_codes` (Incremental)
+</Accordion>
+
+<Accordion title="Payment method streams">
+  - `bank_accounts` (Incremental)
+  - `cards` (Incremental)
+  - `cardholders` (Incremental)
+  - `payment_methods` (Incremental)
+  - `setup_intents` (Incremental)
+  - `setup_attempts` (Incremental)
+</Accordion>
+
+<Accordion title="Other streams">
+  - `accounts` (Incremental)
+  - `application_fees` / `application_fee_refunds` (Incremental)
+  - `authorizations` (Incremental)
+  - `checkout_sessions` / `checkout_session_line_items` (Incremental)
+  - `early_fraud_warnings` (Incremental)
+  - `events` (Incremental)
+  - `external_account_bank_accounts` / `external_account_cards` (Incremental)
+  - `file_links` / `files` (Incremental)
+  - `persons` (Incremental)
+  - `reviews` (Incremental)
+  - `shipping_rates` (Incremental)
+  - `transactions` (Incremental)
+  - `usage_records` (Full Refresh)
+</Accordion>
+
+## Incremental deletes
+
+The following streams support incremental deletes. Deleted records are marked with `is_deleted: true`:
+
+`bank_accounts`, `coupons`, `customers`, `external_account_bank_accounts`, `external_account_cards`, `invoice_items`, `invoices`, `persons`, `plans`, `prices`, `products`, `subscriptions`
+
+## 30-day Events API retention
+
+<Warning>
+Stripe's Events API only retains data for 30 days. If a stream's cursor is older than 30 days, incremental sync will miss events that occurred in the gap. Use the **Streams with API Data Retention Validation** setting to automatically fall back to a full refresh for streams with stale cursors.
+</Warning>
+
+## Configuration reference
+
+<ParamField path="account_id" type="string" required>
+  Your Stripe Account ID. Begins with `acct_`.
+</ParamField>
+
+<ParamField path="client_secret" type="string" required>
+  Your Stripe restricted API key with Read permissions.
+</ParamField>
+
+<ParamField path="start_date" type="string" required>
+  The UTC date and time from which to start replicating data, in `YYYY-MM-DDTHH:mm:ssZ` format.
+</ParamField>
+
+<ParamField path="lookback_window_days" type="integer">
+  Number of days to reread from the past on each sync. Default: 0.
+</ParamField>
+
+<ParamField path="slice_range" type="integer">
+  The time window in days for each API request. Default: 365. Smaller values reduce the amount of data to re-sync if a sync is interrupted.
+</ParamField>
+
+<ParamField path="num_workers" type="integer">
+  Number of concurrent worker threads. Default: 10.
+</ParamField>
+
+<ParamField path="api_retention_streams" type="array">
+  List of stream names that should validate cursor age against the 30-day Events API retention limit.
+</ParamField>

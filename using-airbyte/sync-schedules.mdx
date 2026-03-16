@@ -1,0 +1,67 @@
+---
+title: Sync schedules
+description: Configure when your Airbyte connection syncs run — on a schedule, a cron expression, or manually.
+---
+
+For each connection, you choose a schedule type that controls when syncs run. There are three options:
+
+| Schedule type | Description |
+| --- | --- |
+| **Scheduled** | Runs syncs at a fixed time interval (for example, every 24 hours or every 2 hours) |
+| **Cron** | Runs syncs based on a user-defined cron expression |
+| **Manual** | Syncs only run when you trigger them explicitly |
+
+## Scheduled syncs
+
+The following intervals are available:
+
+- Every 1 hour
+- Every 2 hours
+- Every 3 hours
+- Every 6 hours
+- Every 8 hours
+- Every 12 hours
+- Every 24 hours (most common)
+
+When you first create a scheduled connection, a sync runs immediately. After that, a sync is triggered once the time elapsed since the last sync (whether manually or automatically triggered) exceeds the configured interval.
+
+**Example:**
+
+- **October 1, 2:00 PM** — Connection created with a 24-hour schedule.
+- **October 1, 2:01 PM** — Initial sync runs.
+- **October 2, 2:01 PM** — 24 hours have passed; sync triggers automatically.
+- **October 2, 5:00 PM** — User manually triggers a sync.
+- **October 3, 2:01 PM** — Less than 24 hours since last sync; no automatic sync.
+- **October 3, 5:01 PM** — More than 24 hours since last sync; sync triggers automatically.
+
+<Note>
+For scheduled and cron syncs, Airbyte guarantees sync initiation with an accuracy of ±30 minutes.
+</Note>
+
+## Cron syncs
+
+For more precise scheduling, use a cron expression to target a specific time of day or specific days of the week.
+
+Airbyte uses the [Quartz cron scheduler](http://www.quartz-scheduler.org/documentation/quartz-2.3.0/tutorials/crontrigger.html). When setting up a cron expression, you also choose a time zone for the sync to run in.
+
+**Example cron expressions:**
+
+| Cron expression | Sync timing |
+| --- | --- |
+| `0 0 * * * ?` | Every hour, at the top of the hour |
+| `0 0 15 * * ?` | At 3:00 PM every day |
+| `0 0 15 * * MON,TUE` | At 3:00 PM, Monday and Tuesday only |
+| `0 0 0,2,4,6 * * ?` | At 12:00 AM, 2:00 AM, 4:00 AM, and 6:00 AM every day |
+| `0 0 */15 * * ?` | Every 15 hours |
+
+## Manual syncs
+
+When a connection is set to **Manual**, syncs do not run automatically. You can trigger a sync at any time by:
+
+- Clicking **Sync Now** in the Airbyte UI
+- Calling the Airbyte API
+
+## Sync considerations
+
+- Only one sync per connection can run at a time. If a sync is scheduled while a previous sync is still running, it waits until the current sync finishes.
+- On Airbyte Cloud, syncs can run at most every 60 minutes. Contact [Sales](https://airbyte.com/company/talk-to-sales) if you need more frequent replication.

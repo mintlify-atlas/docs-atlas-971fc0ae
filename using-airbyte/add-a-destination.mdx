@@ -1,0 +1,94 @@
+---
+title: Add and manage destinations
+description: Connect to a data warehouse, lake, or database where Airbyte will write your synced data.
+---
+
+A destination is the data warehouse, data lake, database, or other system to which you sync data. Adding a destination is the next step after you [add a source](/using-airbyte/add-a-source).
+
+## Add a destination connector
+
+<Steps>
+  <Step title="Open the Destinations page">
+    In the left navigation, click **Destinations**.
+  </Step>
+  <Step title="Create a new destination">
+    Click **New Destination**.
+  </Step>
+  <Step title="Find your connector">
+    Search for or browse the connector you want to add.
+
+    <Tip>
+    Not sure which destination to use? Click the **Marketplace** tab and select **End-to-End Testing (/dev/null)** to simulate syncs without writing data anywhere. If you're on Airbyte Cloud, **Google Sheets** is easy to authenticate with and makes a great first destination.
+    </Tip>
+  </Step>
+  <Step title="Configure the connector">
+    Every connector has different options, but you typically provide authentication information and specify where to write data.
+
+    <Tabs>
+      <Tab title="Airbyte Cloud (AI-assisted setup)">
+        If you use Airbyte Cloud, you can set up connectors with the Connector Setup Assistant. The AI asks you questions, provides context, and guides you through each field. See [Set up connectors with AI](#set-up-connectors-with-ai) for details.
+      </Tab>
+      <Tab title="Self-managed or manual setup">
+        If you use a self-managed version of Airbyte, or if you prefer the traditional setup experience, fill out the setup form and click **Set up destination**.
+
+        Airbyte tests the connection. Once the test completes, Airbyte takes you to that connector's Connections page.
+      </Tab>
+    </Tabs>
+  </Step>
+</Steps>
+
+## Modify a destination connector
+
+<Steps>
+  <Step title="Open the Destinations page">
+    In the left navigation, click **Destinations**.
+  </Step>
+  <Step title="Select the destination">
+    Find and click the destination connector you want to modify.
+  </Step>
+  <Step title="Update the configuration">
+    Edit the fields in the form on the left side of your screen. Use the documentation panel on the right for reference.
+  </Step>
+  <Step title="Save your changes">
+    Click **Test and save**. Airbyte tests the destination to confirm the connection still works.
+  </Step>
+</Steps>
+
+## Delete a destination connector
+
+<Warning>
+Deleting a destination connector also deletes any connections that rely on it. Data already in your destination is not affected. However, if you recreate the connection later, a full re-sync is required.
+</Warning>
+
+<Steps>
+  <Step title="Open the Destinations page">
+    In the left navigation, click **Destinations**.
+  </Step>
+  <Step title="Select the destination">
+    Find and click the destination connector you want to delete.
+  </Step>
+  <Step title="Delete the destination">
+    Click **Delete this destination**, type the connector name in the confirmation dialog, then click **Delete**.
+  </Step>
+</Steps>
+
+## Set up connectors with AI
+
+On Airbyte Cloud, the Connector Setup Assistant uses AI to walk you through connector configuration. Instead of filling out a form, you have a guided conversation where the AI asks for the information it needs and explains what each field does.
+
+This feature is in beta and may not be available for every connector.
+
+## Reuse destination connectors
+
+Connectors are reusable. In most cases, you only need to set up a destination connector once and can use it in as many connections as you need.
+
+## Other ways to manage destinations
+
+You can also manage destination connectors programmatically:
+
+- [Airbyte API](https://reference.airbyte.com/reference/createdestination)
+- [Terraform](/developers/terraform-provider)
+
+<Tip>
+When using the API or Terraform, you can speed up configuration by filling in values through the UI first, then clicking **Copy JSON**. This copies your configuration as a JSON string you can paste directly into your code.
+</Tip>

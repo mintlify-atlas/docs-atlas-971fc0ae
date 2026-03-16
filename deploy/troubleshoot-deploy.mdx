@@ -1,0 +1,216 @@
+---
+title: 'Troubleshoot deployments'
+description: 'Diagnose and fix common errors encountered when deploying Airbyte with abctl or Helm.'
+---
+
+This guide covers common errors encountered when deploying Airbyte with `abctl`, along with steps to resolve them.
+
+## Common errors
+
+### Airbyte Bootloader failed to start
+
+**Error:** `pod airbyte-abctl-airbyte-bootloader failed`
+
+The `airbyte-bootloader` is the first service to start during installation. Failures are generally caused by the bootloader being unable to connect to the `airbyte-db` service.
+
+`abctl` version `>0.15.0` prints service logs automatically to help diagnose the root cause. Check the logs output by `abctl` for database connectivity errors.
+
+---
+
+### Error running Docker command
+
+**Error:** `unable to create kind cluster: command "docker run --name airbyte-abctl-control-plane ..." failed with error: exit status 125`
+
+Copy the full `docker run` command from the error output and run it manually. This often produces a more informative error message. Also verify that Docker is working correctly:
+
+```bash
+docker run hello-world
+```
+
+---
+
+### Failed to init node with kubeadm
+
+**Error:** `unable to create kind cluster: failed to init node with kubeadm`
+
+This error occurs during cluster initialization. Copy the `docker exec` command from the error output and run it manually to see the full kubeadm error:
+
+```bash
+docker exec --privileged airbyte-abctl-control-plane kubeadm init \
+  --skip-phases=preflight --config=/kind/kubeadm.conf --skip-token-print --v=6
+```
+
+Also verify Docker is running correctly with `docker run hello-world`.
+
+---
+
+### Timed out waiting for the condition
+
+**Error:**
+
+```text
+unable to install airbyte chart: unable to install helm: failed pre-install:
+ 1 error occurred: * timed out waiting for the condition
+```
+
+This usually indicates that one or more Kubernetes pods did not become ready within the expected time. Check pod status:
+
+```bash
+kubectl --kubeconfig ~/.airbyte/abctl/abctl.kubeconfig \
+  --namespace airbyte-abctl get pods
+```
+
+Inspect the logs of any pod that is not in `Running` state.
+
+---
+
+### Cannot ingest direct IP addresses
+
+**Error:** `must be a DNS name, not an IP address`
+
+```text
+unable to create ingress: Ingress.networking.k8s.io "ingress-abctl" is invalid:
+spec.rules[2].host: Invalid value: "0.0.0.0": must be a DNS name, not an IP address
+```
+
+<Tip>
+Upgrade to `abctl` version `>=0.15.0`. This version adds support for exposing IP addresses by default.
+</Tip>
+
+---
+
+### Unable to read values from YAML file
+
+**Error:** `unable to read values from yaml file`
+
+```text
+unable to merge values with values file './values.yaml': unable to read values
+from yaml file './values.yaml': failed to read file ./values.yaml: open ./values.yaml:
+ no such file or directory
+```
+
+<Tip>
+Verify you are in the correct directory or provide the full path to the values file.
+</Tip>
+
+---
+
+### Could not create REST config
+
+**Error:** `could not create rest config`
+
+```text
+unable to initialize local command: error communicating with kubernetes:
+could not create rest config: stat /root/.airbyte/abctl/abctl.kubeconfig:
+no such file or directory
+```
+
+This error occurs when `abctl` does not have permission to create files and folders on your system. Check that the user running `abctl` has write access to `~/.airbyte/abctl/`.
+
+---
+
+### Failed to create patch: order in patch list
+
+**Error:** `failed to create patch: The order in patch list`
+
+This error can occur when you first install with `abctl local install` and then reinstall with `abctl local install --low-resource-mode`. Uninstall and reinstall Airbyte:
+
+```bash
+abctl local uninstall
+abctl local install --low-resource-mode
+```
+
+<Tip>
+Upgrade to `abctl` version `>0.15.1` to avoid this issue.
+</Tip>
+
+---
+
+### Connection refused
+
+**Error:** `connection refused`
+
+```text
+unable to initialize local command: error communicating with kubernetes:
+ unable to fetch kubernetes server version: Get "https://127.0.0.1:50124/version":
+  dial tcp 127.0.0.1:[PORT]: connect: connection refused
+```
+
+The Kubernetes API server is not reachable. Check that the kind cluster is running:
+
+```bash
+docker ps | grep airbyte-abctl-control-plane
+```
+
+If the container is not running, restart the Docker daemon and then run `abctl local install` again.
+
+---
+
+### Secure cookie error on login
+
+**Error:** `Your credentials were correct, but the server failed to set a cookie. You appear to have deployed over HTTP. Make sure you have disabled secure cookies.`
+
+This message appears when you deploy Airbyte to a non-HTTPS host without disabling secure cookies.
+
+- **Fix 1:** Upgrade `abctl` to version 0.29 or higher. Earlier versions could trigger this message incorrectly.
+- **Fix 2:** Redeploy with the `--insecure-cookies` flag:
+
+  ```bash
+  abctl local install --host example.com --insecure-cookies
+  ```
+
+---
+
+### Resource name may not be empty
+
+**Error:** `unexpected error while handling the secret : resource name may not be empty`
+
+<Tip>
+Upgrade to `abctl` version `>0.15.1`. Version 0.15.0 had a bug when a `secrets.yaml` file was present.
+</Tip>
+
+## FAQ
+
+### How do I use kubectl and helm with an abctl-managed cluster?
+
+abctl installs Airbyte into a kind cluster. You can use `kubectl` and `helm` directly by pointing them at the abctl kubeconfig:
+
+```bash
+kubectl --kubeconfig ~/.airbyte/abctl/abctl.kubeconfig \
+  --namespace airbyte-abctl get pods
+```
+
+### How do I find my login email?
+
+In `abctl` v0.11.0 and later, basic-auth was replaced with a randomly generated password. Run:
+
+```bash
+abctl local credentials
+```
+
+If the email field is not populated, set it manually:
+
+```bash
+abctl local credentials --email user@company.example
+```
+
+### How do I use a custom connector with abctl?
+
+Load the connector Docker image into the kind cluster:
+
+```bash
+kind load docker-image <image-name>:<image-tag> -n airbyte-abctl
+```
+
+### How do I connect from a container to a service on the host?
+
+Use the special DNS name `host.docker.internal`, which resolves to the internal IP address used by the host. See [Docker Desktop networking documentation](https://docs.docker.com/desktop/features/networking/#i-want-to-connect-from-a-container-to-a-service-on-the-host) for details.
+
+## Additional resources
+
+- [GitHub Discussions — Getting Started FAQ](https://github.com/airbytehq/airbyte/discussions/categories/questions)
+- [Airbyte Help Center](https://support.airbyte.com/hc)
+- [Community Slack — #ask-community-for-troubleshooting](https://airbytehq.slack.com/archives/C021JANJ6TY)
+- [Community Slack — #ask-ai](https://airbytehq.slack.com/archives/C01AHCD885S)
+- [abctl GitHub releases](https://github.com/airbytehq/abctl/releases/)
+- [Report an abctl bug](https://github.com/airbytehq/airbyte/issues)

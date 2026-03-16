@@ -1,0 +1,258 @@
+---
+title: Getting started with PyAirbyte
+description: Install PyAirbyte and read your first dataset in under five minutes.
+---
+
+This guide walks you through installing PyAirbyte, connecting to a source, and reading data into a local cache.
+
+## Prerequisites
+
+- Python 3.9 or later
+- `pip` or `conda`
+
+For connectors that use Docker images (most Java-based connectors), you also need Docker installed and running.
+
+## Install PyAirbyte
+
+<CodeGroup>
+
+```bash pip
+pip install airbyte
+```
+
+```bash conda
+conda install -c conda-forge airbyte
+```
+
+```bash uv
+uv add airbyte
+```
+
+</CodeGroup>
+
+To verify the installation:
+
+```bash
+python -c "import airbyte as ab; print(ab.__version__)"
+```
+
+## Read your first dataset
+
+The following example uses `source-faker`, a built-in connector that generates synthetic data. It requires no credentials and is a good way to verify your setup.
+
+<Steps>
+  <Step title="Import PyAirbyte">
+    ```python
+    import airbyte as ab
+    ```
+  </Step>
+
+  <Step title="Create a source">
+    ```python
+    source = ab.get_source(
+        "source-faker",
+        config={"count": 1000},
+        install_if_missing=True,
+    )
+    ```
+
+    The `install_if_missing=True` argument tells PyAirbyte to automatically download and install the connector if it is not already present.
+  </Step>
+
+  <Step title="Check the connection">
+    ```python
+    source.check()
+    ```
+
+    This verifies that the connector can connect with the provided configuration and raises an exception if anything is wrong.
+  </Step>
+
+  <Step title="Select streams and read data">
+    ```python
+    source.select_all_streams()
+    result = source.read()
+
+    for name, records in result.streams.items():
+        print(f"Stream {name}: {len(list(records))} records")
+    ```
+
+    Data is written to a local DuckDB cache in the `.cache/` directory by default.
+  </Step>
+
+  <Step title="Work with the results">
+    ```python
+    # Convert a stream to a Pandas DataFrame
+    df = result["users"].to_pandas()
+    print(df.head())
+
+    # Iterate over records directly
+    for record in result["products"].records:
+        print(record["id"], record["name"])
+    ```
+  </Step>
+</Steps>
+
+## Connect to a real source
+
+The following example reads from GitHub. Replace the configuration values with your own.
+
+```python
+import airbyte as ab
+
+source = ab.get_source(
+    "source-github",
+    config={
+        "credentials": {
+            "personal_access_token": "<YOUR_GITHUB_TOKEN>"
+        },
+        "repositories": ["airbytehq/airbyte"],
+        "start_date": "2024-01-01T00:00:00Z",
+    },
+    install_if_missing=True,
+)
+
+source.check()
+
+# Select only the streams you need
+source.select_streams(["issues", "pull_requests", "commits"])
+
+result = source.read()
+print(f"Read {result.processed_records} total records")
+
+# Work with issues
+issues_df = result["issues"].to_pandas()
+print(issues_df[["number", "title", "state"]].head(10))
+```
+
+## Use a custom cache
+
+By default, PyAirbyte writes to a local DuckDB file. To persist data to a different database, pass a cache object to `source.read()`.
+
+<Tabs>
+  <Tab title="Postgres">
+    ```python
+    import airbyte as ab
+    from airbyte.caches import PostgresCache
+
+    cache = PostgresCache(
+        host="localhost",
+        port=5432,
+        database="my_database",
+        username="postgres",
+        password="my_password",
+        schema_name="airbyte",
+    )
+
+    source = ab.get_source("source-faker", config={"count": 500})
+    source.select_all_streams()
+    result = source.read(cache=cache)
+    print(f"Wrote to Postgres: {result.processed_records} records")
+    ```
+  </Tab>
+  <Tab title="Snowflake">
+    ```python
+    import airbyte as ab
+    from airbyte.caches import SnowflakeCache
+
+    cache = SnowflakeCache(
+        account="your_account.us-east-1",
+        username="airbyte_user",
+        password="your_password",
+        database="AIRBYTE_DB",
+        schema_name="RAW",
+        warehouse="COMPUTE_WH",
+        role="AIRBYTE_ROLE",
+    )
+
+    source = ab.get_source("source-stripe", config={
+        "account_id": "<STRIPE_ACCOUNT_ID>",
+        "client_secret": "<STRIPE_SECRET_KEY>",
+        "start_date": "2024-01-01T00:00:00Z",
+    })
+    source.select_streams(["customers", "charges"])
+    result = source.read(cache=cache)
+    ```
+  </Tab>
+  <Tab title="BigQuery">
+    ```python
+    import airbyte as ab
+    from airbyte.caches import BigQueryCache
+
+    cache = BigQueryCache(
+        project_name="my-gcp-project",
+        dataset_name="raw_data",
+        credentials_path="/path/to/service-account.json",
+    )
+
+    source = ab.get_source("source-github", config={...})
+    source.select_all_streams()
+    result = source.read(cache=cache)
+    ```
+  </Tab>
+</Tabs>
+
+## Manage secrets
+
+PyAirbyte provides a `get_secret` function that reads secrets from environment variables, `.env` files, Google Colab secrets, or interactive prompts — so you do not need to hardcode credentials.
+
+```python
+import airbyte as ab
+from airbyte import get_secret
+
+source = ab.get_source(
+    "source-stripe",
+    config={
+        "account_id": get_secret("STRIPE_ACCOUNT_ID"),
+        "client_secret": get_secret("STRIPE_SECRET_KEY"),
+        "start_date": "2024-01-01T00:00:00Z",
+    },
+)
+```
+
+Secrets are resolved in this order by default:
+
+1. Environment variables
+2. `.env` file in the current directory
+3. Google Colab secrets (if running in Colab)
+4. Google Secret Manager (if configured)
+5. Interactive prompt (if `allow_prompt=True`)
+
+## Incremental syncs
+
+When you call `source.read()` multiple times with the same cache, PyAirbyte automatically uses incremental sync mode for connectors that support it. Only new or updated records are fetched on subsequent runs.
+
+```python
+import airbyte as ab
+from airbyte.caches import PostgresCache
+
+cache = PostgresCache(host="localhost", port=5432, database="db",
+                     username="user", password="pass", schema_name="public")
+
+source = ab.get_source("source-github", config={...})
+source.select_streams(["issues"])
+
+# First run: full sync
+result1 = source.read(cache=cache)
+print(f"First run: {result1.processed_records} records")
+
+# Second run: incremental sync (only new issues)
+result2 = source.read(cache=cache)
+print(f"Second run: {result2.processed_records} new records")
+```
+
+To force a full refresh, pass `force_full_refresh=True`:
+
+```python
+result = source.read(cache=cache, force_full_refresh=True)
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="API reference" icon="code" href="/developers/pyairbyte/api-reference">
+    Explore the full `get_source`, `Source`, `ReadResult`, and cache APIs.
+  </Card>
+  <Card title="PyAirbyte MCP server" icon="robot" href="/developers/mcp-servers/overview">
+    Use PyAirbyte with AI assistants via the MCP protocol.
+  </Card>
+</CardGroup>

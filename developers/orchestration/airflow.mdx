@@ -1,0 +1,170 @@
+---
+title: Orchestrate Airbyte with Airflow
+description: Trigger Airbyte sync jobs from Apache Airflow DAGs using the official Airbyte provider.
+---
+
+Airbyte is an official community provider for Apache Airflow. The `AirbyteTriggerSyncOperator` lets you trigger Airbyte sync jobs as tasks in a DAG, making it easy to sequence data ingestion with downstream transformations.
+
+<Note>
+The Airbyte Airflow operator works with the internal Config API and is designed for **self-managed Airbyte** deployments. For Airbyte Cloud orchestration, use [Airflow's HTTP operators](https://airflow.apache.org/docs/apache-airflow-providers-http/stable/operators.html) with the public Airbyte API, as described in [this blog post](https://airbyte.com/blog/orchestrating-airbyte-api-airbyte-cloud-airflow).
+</Note>
+
+## Prerequisites
+
+- A running Airbyte self-managed instance
+- Apache Airflow with the `apache-airflow-providers-airbyte` package installed
+- An Airbyte connection configured with **sync frequency** set to **manual**
+
+## Setup
+
+<Steps>
+  <Step title="Install the Airflow provider">
+    ```bash
+    pip install apache-airflow-providers-airbyte
+    ```
+
+    The full Airbyte provider documentation is available at [airflow.apache.org](https://airflow.apache.org/docs/apache-airflow-providers-airbyte/stable/index.html).
+  </Step>
+
+  <Step title="Create an Airflow HTTP connection">
+    In the Airflow UI, navigate to **Admin > Connections** and create a new HTTP connection:
+
+    - **Connection ID**: `airbyte_conn_example` (or any name you prefer)
+    - **Connection type**: HTTP
+    - **Host**: `localhost` (or the hostname of your Airbyte instance)
+    - **Port**: `8001`
+
+    Airflow uses this connection to communicate with the Airbyte API.
+  </Step>
+
+  <Step title="Find your Airbyte connection ID">
+    Open the Airbyte UI and navigate to **Connections**, then click the connection you want to trigger. Copy the connection ID from the URL:
+
+    ```
+    https://<YOUR_DOMAIN>/workspaces/<WORKSPACE_ID>/connections/<CONNECTION_ID>/status
+    ```
+  </Step>
+
+  <Step title="Create the DAG">
+    Create a file named `dag_airbyte_example.py` in your Airflow `dags/` directory.
+  </Step>
+</Steps>
+
+## Basic DAG
+
+The following DAG triggers a single Airbyte sync job on a daily schedule.
+
+```python
+from airflow import DAG
+from airflow.utils.dates import days_ago
+from airflow.providers.airbyte.operators.airbyte import AirbyteTriggerSyncOperator
+
+with DAG(
+    dag_id="trigger_airbyte_job_example",
+    default_args={"owner": "airflow"},
+    schedule_interval="@daily",
+    start_date=days_ago(1),
+) as dag:
+
+    sync_task = AirbyteTriggerSyncOperator(
+        task_id="airbyte_sync_example",
+        airbyte_conn_id="airbyte_conn_example",
+        connection_id="1e3b5a72-7bfd-4808-a13c-204505490110",
+        asynchronous=False,
+        timeout=3600,
+        wait_seconds=3,
+    )
+```
+
+### Operator parameters
+
+<ParamField path="airbyte_conn_id" type="string" required>
+  The Airflow connection ID pointing to your Airbyte instance.
+</ParamField>
+<ParamField path="connection_id" type="string" required>
+  The UUID of the Airbyte connection to trigger.
+</ParamField>
+<ParamField path="asynchronous" type="boolean">
+  When `False` (default), the operator blocks until the sync completes. When `True`, the operator returns immediately and you must use an `AirbyteJobSensor` to poll for completion.
+</ParamField>
+<ParamField path="timeout" type="integer">
+  Maximum seconds to wait for the job when `asynchronous=False`. Defaults to `3600`.
+</ParamField>
+<ParamField path="wait_seconds" type="integer">
+  Seconds to wait between status polls when `asynchronous=False`. Defaults to `3`.
+</ParamField>
+
+## Asynchronous mode with sensor
+
+If your Airflow workers are under load, using asynchronous mode frees up worker slots while the Airbyte job runs. The `AirbyteJobSensor` does not occupy a worker slot.
+
+```python
+from airflow import DAG
+from airflow.utils.dates import days_ago
+from airflow.providers.airbyte.operators.airbyte import AirbyteTriggerSyncOperator
+from airflow.providers.airbyte.sensors.airbyte import AirbyteJobSensor
+
+with DAG(
+    dag_id="airbyte_trigger_job_async",
+    default_args={"owner": "airflow"},
+    schedule_interval="@daily",
+    start_date=days_ago(1),
+) as dag:
+
+    trigger_sync = AirbyteTriggerSyncOperator(
+        task_id="trigger_airbyte_sync",
+        airbyte_conn_id="airbyte_conn_example",
+        connection_id="1e3b5a72-7bfd-4808-a13c-204505490110",
+        asynchronous=True,
+    )
+
+    wait_for_sync = AirbyteJobSensor(
+        task_id="wait_for_airbyte_sync",
+        airbyte_conn_id="airbyte_conn_example",
+        airbyte_job_id=trigger_sync.output,
+    )
+
+    trigger_sync >> wait_for_sync
+```
+
+## Multi-step pipeline example
+
+This example chains an Airbyte sync with a downstream dbt transformation.
+
+```python
+from airflow import DAG
+from airflow.utils.dates import days_ago
+from airflow.providers.airbyte.operators.airbyte import AirbyteTriggerSyncOperator
+from airflow.operators.bash import BashOperator
+
+with DAG(
+    dag_id="airbyte_dbt_pipeline",
+    default_args={"owner": "airflow"},
+    schedule_interval="0 6 * * *",
+    start_date=days_ago(1),
+) as dag:
+
+    # Step 1: sync data from Stripe
+    sync_stripe = AirbyteTriggerSyncOperator(
+        task_id="sync_stripe",
+        airbyte_conn_id="airbyte_conn_example",
+        connection_id="<STRIPE_CONNECTION_ID>",
+        asynchronous=False,
+        timeout=3600,
+    )
+
+    # Step 2: run dbt transformations
+    run_dbt = BashOperator(
+        task_id="run_dbt",
+        bash_command="cd /path/to/dbt_project && dbt run",
+    )
+
+    sync_stripe >> run_dbt
+```
+
+## Additional resources
+
+- [Airflow Airbyte provider documentation](https://airflow.apache.org/docs/apache-airflow-providers-airbyte/stable/index.html)
+- [Orchestrating Airbyte Cloud with Airflow (blog post)](https://airbyte.com/blog/orchestrating-airbyte-api-airbyte-cloud-airflow)
+- [Step-by-step Airflow + Airbyte setup guide](https://airbyte.com/tutorials/how-to-use-airflow-and-airbyte-together)
+- [ADA stack: Airbyte + dbt + Airflow + BigQuery quickstart](https://github.com/airbytehq/quickstarts/tree/main/airbyte_dbt_airflow_bigquery)

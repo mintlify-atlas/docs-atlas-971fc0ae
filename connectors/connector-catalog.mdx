@@ -1,0 +1,126 @@
+---
+title: Connector Catalog
+description: Browse Airbyte's 600+ pre-built connectors for databases, SaaS apps, file storage, and more.
+---
+
+Airbyte's connector catalog contains 600+ pre-built connectors that let you move data from any source to any destination. Connectors span databases, cloud data warehouses, SaaS applications, file storage systems, and event streams.
+
+## Finding a connector
+
+Use the search bar in the Airbyte UI or browse the categories below to find the connector you need. If you don't see your source or destination, you can [build a custom connector](/connectors/custom-connectors) using the Connector Builder or the Python/Java CDK.
+
+<CardGroup cols={2}>
+  <Card title="Databases" icon="database" href="/connectors/sources/postgres">
+    PostgreSQL, MySQL, MongoDB, Snowflake, SQL Server, Oracle, and more
+  </Card>
+  <Card title="Cloud Warehouses" icon="cloud" href="/connectors/destinations/bigquery">
+    BigQuery, Snowflake, Redshift, Databricks, and more
+  </Card>
+  <Card title="SaaS Applications" icon="grid-2" href="/connectors/sources/salesforce">
+    Salesforce, HubSpot, Stripe, GitHub, Google Analytics, and more
+  </Card>
+  <Card title="File Storage" icon="folder" href="/connectors/sources/s3">
+    Amazon S3, Google Cloud Storage, Azure Blob Storage, and more
+  </Card>
+</CardGroup>
+
+## Popular sources
+
+<CardGroup cols={3}>
+  <Card title="PostgreSQL" icon="elephant" href="/connectors/sources/postgres">
+    Full CDC support via logical replication and xmin
+  </Card>
+  <Card title="MySQL" icon="database" href="/connectors/sources/mysql">
+    CDC via binlog with support for large tables
+  </Card>
+  <Card title="Salesforce" icon="salesforce" href="/connectors/sources/salesforce">
+    All Standard Objects and Custom Objects via Bulk API
+  </Card>
+  <Card title="HubSpot" icon="hubspot" href="/connectors/sources/hubspot">
+    CRM, Marketing, and Sales Hub data streams
+  </Card>
+  <Card title="Stripe" icon="stripe" href="/connectors/sources/stripe">
+    Payments, customers, subscriptions, and more
+  </Card>
+  <Card title="GitHub" icon="github" href="/connectors/sources/github">
+    Repos, issues, pull requests, commits, and more
+  </Card>
+  <Card title="Google Analytics 4" icon="google" href="/connectors/sources/google-analytics-data-api">
+    GA4 events, sessions, and custom reports
+  </Card>
+  <Card title="Snowflake" icon="snowflake" href="/connectors/sources/snowflake">
+    Tables and views via JDBC with incremental sync
+  </Card>
+  <Card title="MongoDB" icon="leaf" href="/connectors/sources/mongodb-v2">
+    Collections via CDC change streams
+  </Card>
+  <Card title="Amazon S3" icon="aws" href="/connectors/sources/s3">
+    CSV, Parquet, Avro, and JSONL file formats
+  </Card>
+</CardGroup>
+
+## Popular destinations
+
+<CardGroup cols={3}>
+  <Card title="BigQuery" icon="google" href="/connectors/destinations/bigquery">
+    Google's serverless data warehouse
+  </Card>
+  <Card title="Snowflake" icon="snowflake" href="/connectors/destinations/snowflake">
+    Cloud data platform with SQL analytics
+  </Card>
+  <Card title="PostgreSQL" icon="elephant" href="/connectors/destinations/postgres">
+    Open-source relational database (best for small volumes)
+  </Card>
+  <Card title="Amazon Redshift" icon="aws" href="/connectors/destinations/redshift">
+    AWS columnar data warehouse
+  </Card>
+  <Card title="Amazon S3" icon="aws" href="/connectors/destinations/s3">
+    Object storage in CSV, Parquet, Avro, or JSONL
+  </Card>
+  <Card title="Databricks" icon="database" href="/connectors/destinations/databricks">
+    Delta Lake on Databricks Lakehouse
+  </Card>
+</CardGroup>
+
+## Connector support levels
+
+Not all connectors are the same. Airbyte uses four support tiers:
+
+| Tier | Maintained by | Production ready | Support |
+|------|--------------|------------------|---------|
+| **Airbyte** | Airbyte team | Yes | SLA for Premium customers |
+| **Enterprise** | Airbyte team | Yes | SLA for Premium customers |
+| **Marketplace** | Community | No SLA | No support |
+| **Custom** | You | Not guaranteed | You own it |
+
+See the [Connector Support Levels](/connectors/connector-support-levels) page for full details on what each tier means for your production data pipelines.
+
+## Sync modes
+
+Every connector supports a subset of Airbyte's sync modes:
+
+- **Full Refresh - Overwrite**: Replace all data in the destination with the latest source data.
+- **Full Refresh - Append**: Add all source records to the destination on each sync without deleting existing records.
+- **Incremental - Append**: Only sync new or updated records, appending them to the destination.
+- **Incremental - Append + Deduped**: Sync new/updated records and deduplicate based on a primary key.
+
+The sync modes available depend on both the source and destination connectors you choose.
+
+## Building a custom connector
+
+If you can't find a connector for your source or destination, you have several options:
+
+<CardGroup cols={2}>
+  <Card title="Connector Builder" icon="wrench" href="/connectors/custom-connectors">
+    No-code builder for HTTP API sources — covers 99% of use cases
+  </Card>
+  <Card title="Python CDK" icon="python" href="/connectors/custom-connectors">
+    Build a connector in Python with full flexibility
+  </Card>
+  <Card title="Request a connector" icon="message" href="https://github.com/airbytehq/airbyte/discussions/new?category=new-connector-request">
+    Submit a request to the Airbyte team or community
+  </Card>
+  <Card title="Contributing guide" icon="code-branch">
+    Learn how to contribute a connector to the catalog
+  </Card>
+</CardGroup>

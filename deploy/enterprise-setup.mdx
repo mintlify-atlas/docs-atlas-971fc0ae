@@ -1,0 +1,175 @@
+---
+title: 'Self-Managed Enterprise setup'
+description: 'Overview and prerequisites for deploying Airbyte Self-Managed Enterprise with SSO, multi-workspace, and role-based access control.'
+---
+
+[Airbyte Self-Managed Enterprise](https://airbyte.com/product/airbyte-enterprise) is the best way to run Airbyte yourself. You get all 600+ pre-built connectors, data never leaves your environment, and Self-Managed Enterprise adds governance capabilities designed for large organizations.
+
+## Enterprise features
+
+| Feature | Description |
+|---|---|
+| User management | Enable multiple users to concurrently move data from a single Airbyte deployment. |
+| Single Sign-On | Manage user access from your Okta, Azure Entra ID, or OIDC-compatible identity provider. |
+| Multiple workspaces | Manage multiple isolated projects or teams on a single Airbyte deployment. |
+| Role-based access | Manage user permissions and access across workspaces from a single pane of glass. |
+| Column hashing | Protect sensitive PII by hashing it as it moves through your pipelines. |
+| Support with SLAs | Priority assistance with deploying, managing, and upgrading Airbyte. |
+
+<Note>
+A valid license key is required to deploy Self-Managed Enterprise. [Talk to sales](https://airbyte.com/company/talk-to-sales) to receive your license key.
+</Note>
+
+## Infrastructure prerequisites
+
+Self-Managed Enterprise must be deployed using Kubernetes. The core Airbyte components (`server`, `workload-launcher`) run as deployments. The `workload-launcher` manages connector-related pods (`check`, `discover`, `read`, `write`, `orchestrator`).
+
+Airbyte supports:
+
+- **Amazon EKS** on EC2
+- **Google Kubernetes Engine (GKE)** on Google Compute Engine
+- **Azure Kubernetes Service (AKS)**
+
+<Warning>
+Airbyte does **not** support Amazon EKS on Fargate. GKE Autopilot is supported.
+</Warning>
+
+For a production-ready deployment, prepare the following infrastructure components. When possible, run all components in the same VPC:
+
+| Component | Recommendation |
+|---|---|
+| Kubernetes cluster | EKS on EC2 in 2+ availability zones, minimum 6 nodes, memory-optimized instances (M7i/M7g, minimum 2 cores, 8 GB RAM) |
+| Ingress | Amazon ALB or NGINX with a URL for users to access the UI and API |
+| Object storage | S3, GCS, or Azure Blob with directories for log and state storage |
+| Database | Amazon RDS PostgreSQL or GCP Cloud SQL with at least one read replica |
+| Secrets manager | AWS Secrets Manager, Google Secret Manager, or Azure Key Vault |
+
+## Required tooling
+
+Install and configure the following before deploying:
+
+<Steps>
+  <Step title="Install Helm">
+    Follow the [Helm installation instructions](https://helm.sh/docs/intro/install/).
+  </Step>
+  <Step title="Install kubectl">
+    Follow the [kubectl installation instructions](https://kubernetes.io/docs/tasks/tools/).
+  </Step>
+  <Step title="Configure kubectl to connect to your cluster">
+    <Tabs>
+      <Tab title="Amazon EKS">
+        ```bash
+        eksctl utils write-kubeconfig --cluster=$CLUSTER_NAME
+        kubectl config get-contexts
+        kubectl config use-context $EKS_CONTEXT
+        ```
+      </Tab>
+      <Tab title="GKE">
+        ```bash
+        gcloud auth login
+        gcloud container clusters get-credentials $CLUSTER_NAME \
+          --zone $ZONE_NAME --project $PROJECT_NAME
+        kubectl config use-context $GKE_CONTEXT
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+  <Step title="Create the Kubernetes namespace">
+    ```bash
+    kubectl create namespace airbyte
+    ```
+  </Step>
+</Steps>
+
+## Configure Kubernetes secrets
+
+Before installing, create a Kubernetes secret named `airbyte-config-secrets` that contains your license key and other sensitive values.
+
+<Tabs>
+  <Tab title="S3 (YAML)">
+    ```yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: airbyte-config-secrets
+    type: Opaque
+    stringData:
+      # Enterprise license key
+      license-key: xxxxx.yyyyy.zzzzz
+
+      # Database
+      database-host: database.internal
+      database-port: "5432"
+      database-name: airbyte
+      database-user: airbyte
+      database-password: password
+
+      # Instance admin
+      instance-admin-email: admin@company.example
+      instance-admin-password: password
+
+      # SSO OIDC credentials
+      client-id: e83bbc57-1991-417f-8203-3affb47636cf
+      client-secret: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+
+      # AWS S3
+      s3-access-key-id: AKIAIOSFODNN7EXAMPLE
+      s3-secret-access-key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+
+      # AWS Secrets Manager
+      aws-secret-manager-access-key-id: AKIAIOSFODNN7EXAMPLE
+      aws-secret-manager-secret-access-key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+    ```
+
+    Apply the secret:
+
+    ```bash
+    kubectl apply -f secrets.yaml -n airbyte
+    ```
+  </Tab>
+  <Tab title="GCS (YAML)">
+    Create a `gcp.json` file containing your service account credentials, then:
+
+    ```yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: airbyte-config-secrets
+    type: Opaque
+    stringData:
+      license-key: xxxxx.yyyyy.zzzzz
+      database-host: database.internal
+      database-port: "5432"
+      database-name: airbyte
+      database-user: airbyte
+      database-password: password
+      instance-admin-email: admin@company.example
+      instance-admin-password: password
+      client-id: e83bbc57-1991-417f-8203-3affb47636cf
+      client-secret: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+      gcp.json: <CREDENTIALS_JSON_BLOB>
+    ```
+  </Tab>
+  <Tab title="kubectl (S3)">
+    ```bash
+    kubectl create secret generic airbyte-config-secrets \
+      --from-literal=license-key='' \
+      --from-literal=database-host='' \
+      --from-literal=database-port='' \
+      --from-literal=database-name='' \
+      --from-literal=database-user='' \
+      --from-literal=database-password='' \
+      --from-literal=instance-admin-email='' \
+      --from-literal=instance-admin-password='' \
+      --from-literal=s3-access-key-id='' \
+      --from-literal=s3-secret-access-key='' \
+      --from-literal=aws-secret-manager-access-key-id='' \
+      --from-literal=aws-secret-manager-secret-access-key='' \
+      --namespace airbyte
+    ```
+  </Tab>
+</Tabs>
+
+## Next steps
+
+With your infrastructure and secrets in place, follow the [Enterprise implementation guide](/deploy/enterprise-implementation) to complete the deployment.

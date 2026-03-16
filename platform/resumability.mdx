@@ -1,0 +1,79 @@
+---
+title: "Sync Resumability"
+description: "How Airbyte handles sync failures and resumes interrupted data transfers"
+---
+
+# Resumability and Resumable Full Refresh
+
+## What is resumability?
+
+Airbyte strives to create resilient syncs that can handle networking issues, flaky source APIs, and under-provisioned destinations. Whenever possible, Airbyte syncs are **resumable** — if something goes wrong, Airbyte immediately retries with a new attempt and keeps retrying as long as the source produces records and the destination can commit them.
+
+<Warning>
+To achieve resumability, Airbyte may deliver a record more than once. **Airbyte is an at-least-once delivery system.** Use a destination and sync mode that includes deduplication if you need exactly-once semantics.
+</Warning>
+
+## How resumability works
+
+Instead of a single large query like `SELECT * FROM users` (which holds long-lasting locks and cannot resume midway), Airbyte breaks queries into chunks:
+
+```sql
+-- Paginated chunked queries (PostgreSQL example using CTID)
+SELECT * FROM users WHERE CTID >= '(0,1)' AND CTID < '(10,1)'
+SELECT * FROM users WHERE CTID >= '(10,1)' AND CTID < '(20,1)'
+-- ...
+```
+
+This approach:
+- Avoids long-lasting transaction locks on tables
+- Allows very large tables to sync without memory exhaustion
+- Provides a cursor that Airbyte uses to resume from the correct position after a failure
+
+The same chunking logic applies to API sources — page-based API calls serve as natural checkpoints.
+
+## Resumable Full Refresh
+
+Resumability is inherent to **Incremental** syncs. **Resumable Full Refresh** extends this capability to Full Refresh syncs using *artificial cursors* — best-effort cursors that are not in the data schema (like PostgreSQL's CTID system column).
+
+### Supported sources
+
+Resumable Full Refresh is automatically enabled for connections with a supported source and a Refresh-enabled destination:
+
+**Database sources:**
+
+| Source | Minimum version | Notes |
+|--------|-----------------|-------|
+| MySQL | 3.4.7+ | Tables without primary keys are not supported |
+| MSSQL | 4.0.27+ | Tables without primary keys are not supported |
+| PostgreSQL | 3.4.10+ | Views are not supported |
+| MongoDB | 1.3.14+ | |
+
+**API sources:** All sources on Python CDK version 1.1.0 and above.
+
+### Identifying resumed streams
+
+When a sync resumes, Airbyte logs the number and names of resumed streams:
+
+```
+2024-07-08 22:58:40 replication-orchestrator > Number of Resumed Full Refresh Streams: {1}
+2024-07-08 22:58:40 replication-orchestrator >  Resumed stream name: activities namespace: null
+```
+
+## Retry behavior
+
+When a sync attempt fails, Airbyte automatically retries:
+
+- **5** consecutive attempts with no data synced
+- **10** total attempts with no data synced
+- **20** total attempts where some data was synchronized
+
+Backoff periods between consecutive failures:
+
+| Failure | Wait |
+|---------|------|
+| 1st | 10 seconds |
+| 2nd | 30 seconds |
+| 3rd | 90 seconds |
+| 4th | 4 minutes 30 seconds |
+
+A partially successful attempt (some data synced) resets the backoff counter.

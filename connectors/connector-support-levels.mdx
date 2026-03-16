@@ -1,0 +1,93 @@
+---
+title: Connector Support Levels
+description: Understand the four connector support tiers in Airbyte — Airbyte, Enterprise, Marketplace, and Custom — and what each means for production readiness and SLAs.
+---
+
+Airbyte connectors are grouped into four support levels. The support level determines who maintains the connector, how production-ready it is, and what kind of support you can expect when something goes wrong.
+
+## Support level comparison
+
+|  | Airbyte | Enterprise | Marketplace | Custom |
+|--|---------|------------|-------------|--------|
+| **Maintained by** | Airbyte | Airbyte | Community | You |
+| **Production readiness** | Guaranteed | Guaranteed | No SLAs | Not guaranteed |
+| **Support: Cloud** | Supported* | Supported* | No support | Supported** |
+| **Support: Powered by Airbyte** | Supported* | Supported* | No support | Supported** |
+| **Support: Self-Managed Enterprise** | Supported* | Supported* | No support | Supported** |
+| **Support: Open Source (Core)** | Slack only | N/A | No support | Slack only |
+| **Who can use them** | Everyone | Extra license required | Everyone | You only |
+
+\*For Airbyte connectors, official support SLAs are only available to customers with Premium Support included in their contract. Otherwise, Airbyte addresses issues through the support portal as soon as possible.
+
+\*\*For custom connectors, official support SLAs are only available to customers with Premium Support. Support is provided with best efforts — maintenance and upgrades are owned by the customer.
+
+## Airbyte connectors
+
+**Airbyte** connectors are built and maintained by Airbyte to a high quality standard. These are the connectors you'll find in the core catalog and they cover the most widely used data sources and destinations.
+
+Airbyte connectors:
+
+- Are tested, vetted, and production-ready.
+- Are officially supported and available to all users.
+- Experience few breaking changes. When an upgrade is required, Airbyte provides an adequate upgrade window and advance notice.
+- Include certified database connectors like PostgreSQL, MySQL, MongoDB, and Snowflake, along with popular SaaS connectors like Salesforce, HubSpot, and Stripe.
+
+<Note>
+If you're building a new data pipeline for production use, start with Airbyte connectors whenever possible.
+</Note>
+
+## Enterprise connectors
+
+**Enterprise** connectors are premium connectors available exclusively for Self-Managed Enterprise and Airbyte Pro customers at an additional cost.
+
+Enterprise connectors:
+
+- Are built and maintained by the Airbyte team.
+- Provide enhanced capabilities and support for critical enterprise systems.
+- Are **not** available to Open Source (Core) or standard Cloud customers.
+- Support larger data sets, parallelism for faster data transfers, and are covered under Airbyte's support SLAs.
+
+Contact your Airbyte account team to learn which connectors are available at the Enterprise tier and to add them to your contract.
+
+## Marketplace connectors
+
+**Marketplace** connectors are maintained by Airbyte's community members using the [Connector Builder](https://docs.airbyte.com/connector-development/connector-builder-ui/overview). These connectors cover a wide range of data sources that are not yet in the core catalog.
+
+Marketplace connectors:
+
+- Are **not** maintained by Airbyte.
+- Do **not** have support SLAs.
+- Should be used with caution in production environments.
+- May not be feature complete and may experience backward-incompatible, breaking changes without notice.
+- Are available to everyone.
+- Can be improved by contributors — [learn how to contribute](https://github.com/airbytehq/airbyte/blob/master/CONTRIBUTING.md).
+
+In the Airbyte UI, Marketplace connectors display their popularity score and success rate data so you can make an informed decision before using them in production.
+
+<Warning>
+Do not rely on Marketplace connectors for critical production pipelines without thorough testing and a plan to handle breaking changes.
+</Warning>
+
+## Custom connectors
+
+**Custom** connectors are connectors you build and maintain yourself, exclusively for your own workspace. You take full ownership of the connector's quality, reliability, and production readiness.
+
+Custom connectors:
+
+- Are built using the [Connector Builder](https://docs.airbyte.com/connector-development/connector-builder-ui/overview) (recommended for HTTP APIs), the Python CDK, the Java CDK, or any other language via Docker.
+- Are visible only in the workspace where you created them.
+- Are your responsibility to maintain and upgrade.
+- Can receive official support SLAs only if you have Premium Support in your contract, and only with best-efforts coverage.
+
+See the [Custom Connectors](/connectors/custom-connectors) page to get started building your own connector.
+
+## Archived connectors
+
+From time to time, Airbyte removes a connector from the active catalog. This typically happens when a connector has very low usage and is not actively maintained by the community. Archiving ensures the connector catalog maintains a minimum quality level.
+
+Archived connectors:
+
+- No longer receive updates or support from Airbyte.
+- Remain source-available in the [`airbytehq/connector-archive`](https://github.com/airbytehq/connector-archive) repository on GitHub.
+
+To take over maintenance of an archived connector, open a [GitHub Discussion](https://github.com/airbytehq/airbyte/discussions/). The connector must pass [Acceptance Tests](/build-connectors/testing-connectors) before you can start the un-archiving process.

@@ -1,0 +1,147 @@
+---
+title: Orchestrate Airbyte with Prefect
+description: Trigger Airbyte sync jobs from Prefect flows using the official Airbyte task integration.
+---
+
+Airbyte is an official integration in the Prefect project. The `AirbyteConnectionTask` lets you trigger Airbyte sync jobs as tasks within a Prefect flow.
+
+## Prerequisites
+
+- A running Airbyte self-managed instance
+- Prefect installed (`pip install prefect`)
+- An Airbyte connection with **sync frequency** set to **manual**
+
+## Setup
+
+<Steps>
+  <Step title="Install Prefect">
+    ```bash
+    pip install prefect prefect-airbyte
+    ```
+
+    See the [Prefect installation guide](https://docs.prefect.io/core/getting_started/install.html) for detailed setup instructions.
+  </Step>
+
+  <Step title="Create a Prefect project">
+    ```bash
+    prefect create project "airbyte"
+    ```
+  </Step>
+
+  <Step title="Find your Airbyte connection ID">
+    Open the Airbyte UI at `localhost:8000`, navigate to **Connections**, and copy the connection ID from the URL.
+  </Step>
+
+  <Step title="Create the flow file">
+    Create a new directory and flow file:
+
+    ```bash
+    mkdir airbyte_prefect
+    touch airbyte_prefect/airbyte_prefect_flow.py
+    ```
+  </Step>
+</Steps>
+
+## Basic flow
+
+The following example creates a Prefect flow that triggers a single Airbyte sync.
+
+```python
+from prefect import Flow
+from prefect.tasks.airbyte.airbyte import AirbyteConnectionTask
+
+airbyte_conn = AirbyteConnectionTask(
+    airbyte_server_host="localhost",
+    airbyte_server_port=8000,
+    airbyte_api_version="v1",
+    connection_id="04e128af-1092-4a83-bf33-1b8c85395d74",
+)
+
+with Flow("first-airbyte-task") as flow:
+    flow.add_task(airbyte_conn)
+
+# Register the flow under the "airbyte" project
+flow.register(project_name="airbyte")
+```
+
+### Task parameters
+
+<ParamField path="airbyte_server_host" type="string" required>
+  Hostname of your Airbyte instance.
+</ParamField>
+<ParamField path="airbyte_server_port" type="integer" required>
+  Port your Airbyte instance is running on.
+</ParamField>
+<ParamField path="airbyte_api_version" type="string">
+  API version to use. Defaults to `"v1"`.
+</ParamField>
+<ParamField path="connection_id" type="string" required>
+  UUID of the Airbyte connection to trigger.
+</ParamField>
+
+## Register and run the flow
+
+After creating the flow file, register it with the Prefect server:
+
+```bash
+python3 airbyte_prefect/airbyte_prefect_flow.py
+```
+
+This registers the flow under the `airbyte` project. You can then trigger it from the Prefect UI or CLI.
+
+## Multi-connection pipeline
+
+This example triggers two Airbyte syncs in sequence, then runs a transformation.
+
+```python
+from prefect import Flow, task
+from prefect.tasks.airbyte.airbyte import AirbyteConnectionTask
+import subprocess
+
+# Define tasks for each Airbyte connection
+sync_stripe = AirbyteConnectionTask(
+    airbyte_server_host="localhost",
+    airbyte_server_port=8000,
+    airbyte_api_version="v1",
+    connection_id="<STRIPE_CONNECTION_ID>",
+    name="sync_stripe",
+)
+
+sync_github = AirbyteConnectionTask(
+    airbyte_server_host="localhost",
+    airbyte_server_port=8000,
+    airbyte_api_version="v1",
+    connection_id="<GITHUB_CONNECTION_ID>",
+    name="sync_github",
+)
+
+@task
+def run_transformations():
+    subprocess.run(["dbt", "run"], cwd="/path/to/dbt_project", check=True)
+
+with Flow("multi-source-pipeline") as flow:
+    stripe_result = sync_stripe()
+    github_result = sync_github()
+    run_transformations(upstream_tasks=[stripe_result, github_result])
+
+flow.register(project_name="airbyte")
+```
+
+## Scheduling
+
+To run your flow on a schedule, configure it using Prefect's schedule API before registering:
+
+```python
+from prefect.schedules import CronSchedule
+
+flow.schedule = CronSchedule("0 6 * * *")  # daily at 6am UTC
+flow.register(project_name="airbyte")
+```
+
+See the [Prefect schedule documentation](https://docs.prefect.io/core/concepts/schedules.html) for the full scheduling API.
+
+## Additional resources
+
+- [Prefect Airbyte task documentation](https://docs.prefect.io/api/latest/tasks/airbyte.html#airbyteconnectiontask)
+- [Prefect 2.0 community guide for Airbyte](https://www.prefect.io/guide/community-posts/orchestrating-airbyte-with-prefect-2-0/)
+- [ADP stack: Airbyte + dbt + Prefect + BigQuery quickstart](https://github.com/airbytehq/quickstarts/tree/main/airbyte_dbt_prefect_bigquery)

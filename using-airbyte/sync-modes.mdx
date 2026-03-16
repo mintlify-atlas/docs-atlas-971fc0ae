@@ -1,0 +1,218 @@
+---
+title: Sync modes
+description: Understand how Airbyte reads from sources and writes to destinations using different sync modes.
+---
+
+A sync mode governs how Airbyte reads from a source and writes to a destination. Airbyte provides different sync modes to handle various use cases. The name of each mode reflects its behavior.
+
+## How sync mode names work
+
+Each sync mode name has two parts:
+
+1. **How the source is read:**
+   - **Full Refresh** — Read everything in the source, every sync.
+   - **Incremental** — Read only records added or modified since the last sync. The first incremental sync is equivalent to a full refresh.
+
+2. **How data is written to the destination:**
+   - **Overwrite** — Replace existing data in the destination.
+   - **Append** — Add new data to existing tables without removing anything.
+   - **Append Deduped** — Add data to existing tables, then deduplicate the final table using a primary key.
+   - **Overwrite Deduped** — Replace existing data and deduplicate using a primary key.
+
+## Available sync modes
+
+<AccordionGroup>
+  <Accordion title="Full Refresh | Overwrite">
+    **Best for:** Small datasets where you always want the destination to exactly mirror the source.
+
+    Every sync reads all data from the source and replaces the destination table entirely. Records removed from the source will also be removed from the destination after the next sync.
+
+    **Example:**
+
+    Data in the destination before sync:
+
+    | Languages |
+    | :-------- |
+    | Python    |
+    | Java      |
+    | Bash      |
+
+    New data in the source:
+
+    | Languages |
+    | :-------- |
+    | Python    |
+    | Java      |
+    | Ruby      |
+
+    Data in the destination after sync:
+
+    | Languages |
+    | :-------- |
+    | Python    |
+    | Java      |
+    | Ruby      |
+
+    For certified database and data warehouse destinations, Airbyte writes to a temporary table during the sync, then swaps it in atomically at the end — keeping the previous data available until the swap completes.
+  </Accordion>
+
+  <Accordion title="Full Refresh | Append">
+    **Best for:** Tracking historical snapshots of data over time.
+
+    Every sync reads all data from the source and appends it to the destination table. Existing records are never deleted or modified. This means each sync creates duplicates of previously synced records.
+
+    **Example:**
+
+    Data in the destination before the nth sync:
+
+    | Languages |
+    | :-------- |
+    | Python    |
+    | Java      |
+
+    New data from the source:
+
+    | Languages |
+    | :-------- |
+    | Python    |
+    | Java      |
+    | Ruby      |
+
+    Data in the destination after sync:
+
+    | Languages |
+    | :-------- |
+    | Python    |
+    | Java      |
+    | Python    |
+    | Java      |
+    | Ruby      |
+
+    You can use a batch ID or timestamp column to identify when each record was synced, which makes it possible to detect deletions in the source over time.
+  </Accordion>
+
+  <Accordion title="Full Refresh | Overwrite + Deduped">
+    **Best for:** Full refresh syncs where you want to guarantee uniqueness per primary key.
+
+    Like Full Refresh Overwrite, every sync replaces the destination table with current source data. The deduped variant additionally ensures the final table contains only one row per primary key value.
+
+    <Note>
+    Full Refresh syncs may be resumed after transient errors, which can introduce duplicates. If avoiding duplicates is a strict requirement, use Overwrite + Deduped instead of plain Overwrite. Note that deduplication incurs additional warehouse compute costs.
+    </Note>
+  </Accordion>
+
+  <Accordion title="Incremental | Append">
+    **Best for:** Large datasets where you want to preserve full history without re-syncing old data.
+
+    Only new or modified records are read from the source on each sync. Records are appended to the destination — existing records are never deleted or updated in place. This means you may find multiple versions of the same record in the destination.
+
+    Airbyte provides **at-least-once** delivery, so sources may occasionally re-send some records.
+
+    **Key concepts:**
+
+    - **Cursor** — The value used to determine whether a record is new or modified. Commonly a timestamp from an `updated_at` column.
+    - **Cursor field** — The column in the data where the cursor value is found.
+
+    **Example — Updating a record:**
+
+    Existing data in the destination:
+
+    | name             | deceased | updated_at |
+    | :--------------- | :------- | :--------- |
+    | Louis XVI        | false    | 1754       |
+    | Marie Antoinette | false    | 1755       |
+
+    Delta from the next sync:
+
+    | name             | deceased | updated_at |
+    | :--------------- | :------- | :--------- |
+    | Louis XVI        | true     | 1793       |
+    | Marie Antoinette | true     | 1793       |
+
+    Data in the destination after sync:
+
+    | name             | deceased | updated_at |
+    | :--------------- | :------- | :--------- |
+    | Louis XVI        | false    | 1754       |
+    | Marie Antoinette | false    | 1755       |
+    | Louis XVI        | true     | 1793       |
+    | Marie Antoinette | true     | 1793       |
+
+    Both old and new versions of each record are present. If you only need the latest snapshot, use **Incremental | Append + Deduped** instead.
+
+    **Known limitation:** If a record is modified in the source but the cursor field is not updated, the change will not be detected. The source connector extracts records using a query like:
+
+    ```sql
+    SELECT * FROM table WHERE cursor_field >= 'last_sync_max_cursor_field_value'
+    ```
+
+    For changes that don't update the cursor field, consider using [Change Data Capture (CDC)](/platform/cdc).
+  </Accordion>
+
+  <Accordion title="Incremental | Append + Deduped">
+    **Best for:** Keeping the destination in sync with the source while preserving history in a raw table.
+
+    Syncs only new or modified records (incremental), appends them to the destination, and maintains a deduplicated final table where each primary key appears only once — reflecting the latest state of each record.
+
+    If the source supports it, deletion events are also applied to the deduplicated table.
+
+    **Key concepts:**
+
+    - **Cursor** — Tracks which records are new or modified. A common example is a timestamp from an `updated_at` column.
+    - **Cursor field** — The column containing the cursor value.
+    - **Primary key** — One or more fields that uniquely identify each record. Composite primary keys (multiple fields) are also supported.
+
+    **Example — Creating a new record:**
+
+    Existing data:
+
+    | name             | deceased | updated_at |
+    | :--------------- | :------- | :--------- |
+    | Louis XVI        | false    | 1754       |
+    | Marie Antoinette | false    | 1755       |
+
+    Delta:
+
+    | name       | deceased | updated_at |
+    | :--------- | :------- | :--------- |
+    | Louis XVII | false    | 1785       |
+
+    Final table after sync:
+
+    | name             | deceased | updated_at |
+    | :--------------- | :------- | :--------- |
+    | Marie Antoinette | false    | 1755       |
+    | Louis XVI        | false    | 1754       |
+    | Louis XVII       | false    | 1785       |
+
+    **Example — Updating existing records:**
+
+    Delta:
+
+    | name             | deceased | updated_at |
+    | :--------------- | :------- | :--------- |
+    | Louis XVI        | true     | 1793       |
+    | Marie Antoinette | true     | 1793       |
+
+    Final table after sync (only latest per primary key):
+
+    | name             | deceased | updated_at |
+    | :--------------- | :------- | :--------- |
+    | Louis XVI        | true     | 1793       |
+    | Marie Antoinette | true     | 1793       |
+    | Louis XVII       | false    | 1785       |
+
+    The cursor and primary key can be source-defined (automatic) or user-defined (chosen manually in the Schema tab for the connection).
+  </Accordion>
+</AccordionGroup>
+
+## Choosing a sync mode
+
+| Use case | Recommended mode |
+| --- | --- |
+| Always mirror source exactly | Full Refresh \| Overwrite |
+| Track changes over time (append only) | Full Refresh \| Append |
+| Large source, keep latest per row | Incremental \| Append + Deduped |
+| Large source, full history + latest view | Incremental \| Append + Deduped |
+| Avoid re-syncing unchanged data | Any Incremental mode |
+| Strict deduplication on full refresh | Full Refresh \| Overwrite + Deduped |

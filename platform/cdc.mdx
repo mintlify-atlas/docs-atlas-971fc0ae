@@ -1,0 +1,85 @@
+---
+title: "Change Data Capture (CDC)"
+description: "Real-time database replication using log-based change data capture"
+---
+
+# Change Data Capture (CDC)
+
+Change Data Capture (CDC) uses database transaction logs to detect and replicate `INSERT`, `UPDATE`, and `DELETE` operations in real time, without requiring full table scans.
+
+## How log-based CDC works
+
+Many databases write all record changes to log files for replication purposes. Airbyte reads these logs while tracking the current position, allowing it to capture all changes since the last sync.
+
+**First sync:** A full snapshot of the current data is taken using a `SELECT` statement (equivalent to Full Refresh). Changes are not logged during this initial snapshot.
+
+**Subsequent syncs:** Airbyte reads from the log position where the last sync ended, capturing only the changes that occurred since then.
+
+<Note>
+CDC sources are not treated as infinite streaming sources. You must schedule syncs frequently enough to consume the logs before they are recycled by the database.
+</Note>
+
+## CDC metadata columns
+
+Airbyte adds metadata columns to all CDC-sourced records. These columns begin with the `_ab_cdc_` prefix:
+
+| Column | Description |
+|--------|-------------|
+| `_ab_cdc_lsn` / `_ab_cdc_cursor` | Position in the log where the record was retrieved |
+| `_ab_cdc_updated_at` | Timestamp of the database transaction (present for INSERT/UPDATE/DELETE) |
+| `_ab_cdc_deleted_at` | Timestamp of deletion (present only for DELETE statements) |
+| `_ab_cdc_log_file` | (MySQL only) Log file name |
+| `_ab_cdc_log_pos` | (MySQL only) Position within the log file |
+
+## Supported databases
+
+<CardGroup cols={2}>
+  <Card title="PostgreSQL" icon="database" href="/connectors/sources/postgres">
+    WAL-based CDC using logical replication slots
+  </Card>
+  <Card title="MySQL" icon="database" href="/connectors/sources/mysql">
+    Binlog-based CDC
+  </Card>
+  <Card title="Microsoft SQL Server" icon="database">
+    SQL Server CDC feature
+  </Card>
+  <Card title="MongoDB" icon="database" href="/connectors/sources/mongodb-v2">
+    Change streams
+  </Card>
+</CardGroup>
+
+Enterprise connectors also support CDC for Oracle DB, SAP HANA, and IBM Db2.
+
+## Limitations
+
+<Warning>
+Be aware of these limitations when using CDC:
+</Warning>
+
+- CDC incremental is only supported for tables **with primary keys** for most sources
+- Data must be in tables, not views
+- Only `DELETE`/`INSERT`/`UPDATE` changes are captured — `TRUNCATE`/`ALTER` changes do not appear in logs
+- Newly created tables/collections require a refresh after creation before CDC can track them
+- The final table will not show records whose most recent operation was a delete (as indicated by `_ab_cdc_deleted_at`)
+
+## Adding new schemas or columns
+
+When you add new schemas or columns to a CDC-enabled database:
+
+<Steps>
+  <Step title="Detect schema changes">
+    You'll see a **Schema changes detected** notice in the Schema section of your connection. Click **Refresh source schema** if the new schema/column is not visible.
+  </Step>
+  <Step title="Review and approve changes">
+    Review the detected changes and enable the newly added schemas/columns.
+  </Step>
+  <Step title="Trigger a refresh">
+    Navigate to the **Status** page:
+    - **For new schemas:** Find the schema, click ⋮, and select **Refresh Stream**
+    - **For new columns:** Find the parent schema, click ⋮, and select **Refresh Stream**
+  </Step>
+</Steps>
+
+<Tip>
+Enable **Approve all schema changes myself** under *Detect and propagate schema changes* in Settings. This prevents newly detected changes from being included in syncs without a proper snapshot, reducing the risk of LSN issues.
+</Tip>

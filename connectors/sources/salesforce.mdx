@@ -1,0 +1,138 @@
+---
+title: Salesforce Source
+description: Replicate Standard Objects and Custom Objects from Salesforce using the Bulk API and REST API.
+---
+
+Airbyte's certified Salesforce source connector replicates data from Salesforce. It dynamically discovers all available Standard Objects and Custom Objects your authenticated user has access to, and syncs each as a separate stream. The connector uses the Bulk API for large objects and falls back to the REST API for objects not supported by Bulk.
+
+## Prerequisites
+
+- A [Salesforce account](https://login.salesforce.com/) with Enterprise edition **or** Professional edition with API access purchased as an add-on
+- (Recommended) A dedicated Salesforce user with Minimum Access profile and a custom permission set granting read-only access to the objects you want to sync
+- For Airbyte Open Source: Salesforce OAuth credentials (Client ID, Client Secret, Refresh Token)
+
+## Setup guide
+
+### Step 1: Create a dedicated Salesforce user (recommended)
+
+Using a dedicated user with minimal permissions lets you control exactly what data Airbyte can read.
+
+<Steps>
+  <Step title="Create a new user">
+    1. In Salesforce, click the gear icon > **Setup**.
+    2. Under **Administration**, go to **Users** > **Users** and click **New User**.
+    3. Set **User License** to `Salesforce` and **Profile** to `Standard User`.
+    4. Fill in the required fields and save.
+  </Step>
+  <Step title="Create a permission set">
+    1. Go to **Users** > **Permission Sets** and click **New**.
+    2. Name the permission set (e.g., "Airbyte Read Only Access") and save.
+    3. Click **Object Settings** and for each object you want to sync, grant **Read** permission only.
+    4. Click **System Permissions** > **Edit** and enable **Use Any API Client** (if API Access Control is enabled) or **Approve Uninstalled Connected Apps**.
+  </Step>
+  <Step title="Assign the permission set">
+    From the Permission Sets page, click **Manage Assignments**, then **Add Assignments**. Select the user you created and click **Assign**.
+  </Step>
+</Steps>
+
+### Step 2: Set up the Salesforce connector in Airbyte
+
+<Tabs>
+  <Tab title="Airbyte Cloud">
+    1. Go to **Sources** > **+ New source** and select **Salesforce**.
+    2. Enter a name for the connector.
+    3. Click **Authenticate your account** and log in to Salesforce with the dedicated user.
+    4. Toggle whether your account is a **Sandbox** or production account.
+    5. (Optional) Set a **Start Date** in `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SSZ` format. Data on and after this date will be replicated. Defaults to the last two years.
+    6. (Optional) Add **Filter Salesforce Object** criteria to limit which objects are replicated.
+    7. (Optional) Set the **Lookback Window** (ISO 8601 duration, e.g., `PT10M`). This controls how far back the connector re-reads data on each incremental sync to handle Salesforce API eventual consistency. Default: `PT10M`.
+    8. Click **Set up source**.
+  </Tab>
+  <Tab title="Airbyte Open Source">
+    1. Go to **Sources** > **+ New source** and select **Salesforce**.
+    2. Enter a name for the connector.
+    3. Enter your **Client ID**, **Client Secret**, and **Refresh Token**.
+    4. Toggle whether your account is a **Sandbox** or production account.
+    5. (Optional) Set a **Start Date** and optional filters.
+    6. Click **Set up source**.
+  </Tab>
+</Tabs>
+
+## Supported sync modes
+
+| Mode | Supported |
+|------|-----------|
+| Full Refresh - Overwrite | Yes |
+| Full Refresh - Append | Yes |
+| Incremental - Append | Yes |
+| Incremental - Append + Deduped | Yes (recommended) |
+
+<Tip>
+Use **Incremental - Append + Deduped** to handle Salesforce's daily API rate limits gracefully. If the sync hits the rate limit, it ends early with a success status and resumes from where it left off on the next run.
+</Tip>
+
+## Supported streams
+
+The connector dynamically discovers all queryable Salesforce objects your user has access to. This includes all Standard Objects and Custom Objects. Each object becomes a separate stream.
+
+Popular streams include:
+
+- `Account`, `Contact`, `Lead`, `Opportunity`, `Case`
+- `Campaign`, `Task`, `Event`, `Contract`
+- `Product2`, `Pricebook2`, `PricebookEntry`
+- `User`, `UserRole`, `Profile`
+- Custom objects created in your Salesforce org
+
+For a complete list of Standard Objects, see the [Salesforce Object Reference](https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_list.htm).
+
+## Bulk API vs REST API
+
+The connector uses the Bulk API by default for large objects (>2,000 records). It falls back to the REST API for:
+
+- Objects with `base64` or `complexvalue` column types.
+- Objects not supported by the Bulk API (for example: `Attachment`, `KnowledgeArticle`, `RecentlyViewed`).
+
+<Tip>
+Set **Force Use Bulk API** to `true` to always use the Bulk API, even for objects with unsupported properties. The connector will ignore those properties.
+</Tip>
+
+## Syncing deleted records
+
+The connector supports retrieving records from the Salesforce recycle bin. Deleted records are marked with `isDeleted=true`.
+
+## Missing records (eventual consistency)
+
+Salesforce does not guarantee that recently created or updated records are immediately available through its API. If you observe missing records:
+
+1. Increase the **Lookback Window** in the connector settings.
+2. Common values: `PT10M` (10 min), `PT30M` (30 min), `PT1H` (1 hour), `P1D` (1 day).
+
+## Configuration reference
+
+<ParamField path="client_id" type="string">
+  (Open Source only) Salesforce OAuth client ID.
+</ParamField>
+
+<ParamField path="client_secret" type="string">
+  (Open Source only) Salesforce OAuth client secret.
+</ParamField>
+
+<ParamField path="refresh_token" type="string">
+  (Open Source only) Salesforce OAuth refresh token.
+</ParamField>
+
+<ParamField path="is_sandbox" type="boolean">
+  Set to `true` if connecting to a Salesforce Sandbox account. Default: `false`.
+</ParamField>
+
+<ParamField path="start_date" type="string">
+  The start date for data replication in `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SSZ` format. Defaults to 2 years ago.
+</ParamField>
+
+<ParamField path="streams_criteria" type="array">
+  Optional filters to limit which Salesforce objects are replicated.
+</ParamField>
+
+<ParamField path="lookback_window" type="string">
+  ISO 8601 duration controlling how far back data is re-read on each incremental sync. Default: `PT10M`.
+</ParamField>

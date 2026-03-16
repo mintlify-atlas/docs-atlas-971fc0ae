@@ -1,0 +1,118 @@
+---
+title: "CDC Best Practices"
+description: "Guidance on configuring and optimizing Change Data Capture for production use"
+---
+
+# CDC best practices
+
+This guide provides best practices for configuring and using CDC with Airbyte. It focuses on optimizing settings based on your data size, activity patterns, and sync requirements.
+
+<Note>
+This guide assumes basic familiarity with CDC. For an introduction, see [Change Data Capture](/platform/cdc).
+</Note>
+
+## Source configuration
+
+### Initial waiting time
+
+The initial waiting time controls:
+- **During snapshot phase:** Time limit for building the schema structure and capturing baseline data
+- **During CDC incremental:** How long Airbyte waits for new change events before timing out
+
+| Scenario | Recommendation | Reasoning |
+|----------|---------------|----------|
+| Default use case | Start with the default value | Adjust only if experiencing timeouts |
+| High-activity databases | Keep default | Changes arrive frequently, shorter waits are sufficient |
+| Low-activity databases | Increase by 300s minimum | Longer waits help capture infrequent changes |
+| Many schemas/tables | Increase during snapshot and CDC phases | Gives more time to process changes across schemas |
+| Simple schemas | Default values work well | No adjustment needed |
+
+<Tip>
+For high-activity databases with many schemas/tables, you may still need to increase this value despite frequent changes — schema complexity affects processing time independently of data volume.
+</Tip>
+
+### Invalid CDC position behavior
+
+When the CDC position becomes invalid (due to WAL recycling or extended sync gaps), you have two options:
+
+<Tabs>
+  <Tab title="Re-sync Data (Automatic Recovery)">
+    Automatically triggers a full refresh and re-snapshots the entire database.
+
+    **Pros:**
+    - Fully automated
+    - Ensures data consistency
+
+    **Cons:**
+    - Time-consuming for large datasets
+    - Resource-intensive
+    - Can lead to unexpected costs (compute, database load, data transfer)
+
+    **Best for:** Small datasets, development environments
+  </Tab>
+  <Tab title="Fail Sync (Manual Intervention)">
+    Stops the sync and marks it as failed. No automatic action is taken.
+
+    **Pros:**
+    - Allows investigation and controlled resolution
+    - Prevents unexpected resource consumption
+    - Avoids unexpected costs
+
+    **Cons:**
+    - Requires manual restart after resolving
+    - Potential data gaps until resolved
+
+    **Best for:** Production environments, large databases
+  </Tab>
+</Tabs>
+
+## Sync scheduling
+
+### Schedule syncs frequently
+
+Database transaction logs have limited retention. If Airbyte doesn't sync before logs are recycled, the CDC position becomes invalid.
+
+| Database log type | Typical retention |
+|------------------|------------------|
+| PostgreSQL WAL | Configurable (default: position-based) |
+| MySQL binlog | Configurable (default: 30 days) |
+| SQL Server CDC | Configurable cleanup job |
+| MongoDB oplog | Configurable (default: 24 hours minimum) |
+
+<Warning>
+If your database has high write volume or low log retention, schedule syncs more frequently (e.g., every 1-6 hours instead of daily).
+</Warning>
+
+### Handling large initial snapshots
+
+The first CDC sync requires a full table snapshot. For large tables:
+
+- Run the initial sync during off-peak hours
+- Ensure sufficient disk space in your destination for the full dataset
+- Monitor the sync progress — initial snapshots may take hours for very large tables
+- Consider using Resumable Full Refresh (available for PostgreSQL, MySQL, MSSQL, MongoDB) so that interrupted snapshots can resume rather than restart
+
+## Primary key requirements
+
+Most CDC-enabled sources require primary keys on tables for proper CDC tracking:
+
+- Tables without primary keys can still be synced in **Full Refresh** mode
+- You can mix CDC (Incremental) and Full Refresh on different streams within the same connection
+- Add primary keys before enabling CDC on a table whenever possible
+
+## Monitoring CDC health
+
+<Steps>
+  <Step title="Check log position lag">
+    Monitor the gap between the current log position and Airbyte's tracked position. A growing gap indicates syncs are not keeping up with database activity.
+  </Step>
+  <Step title="Watch for schema changes">
+    New tables or columns require a stream refresh before CDC can track them. Configure schema change detection to alert you of new schemas.
+  </Step>
+  <Step title="Monitor sync duration">
+    If syncs are taking longer over time, your database may have increasing write activity. Consider increasing sync frequency.
+  </Step>
+  <Step title="Review CDC metadata columns">
+    Check `_ab_cdc_deleted_at` values in your destination to ensure deletes are being captured. A large number of soft-deleted records may indicate you need to run a reset.
+  </Step>
+</Steps>

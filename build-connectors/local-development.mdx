@@ -1,0 +1,162 @@
+---
+title: "Local Connector Development"
+description: "Set up your local development environment to build, test, and debug Airbyte connectors."
+---
+
+For most new source connectors, start with [Connector Builder](/build-connectors/connector-builder-ui) — it provides the fastest path with no local setup required. When you need to work outside the UI (Python CDK connectors, complex manifests, debugging), this guide covers the local tooling.
+
+## Required tools
+
+<CardGroup cols={2}>
+  <Card title="Poe the Poet" icon="terminal">
+    Common task runner for all connector operations: install, test, lint, and more.
+  </Card>
+  <Card title="uv" icon="bolt">
+    Fast Python package and tool installer. Replaces `pip`, `pipx`, and `pyenv`.
+  </Card>
+  <Card title="Docker" icon="docker">
+    Required for building and running connector container images.
+  </Card>
+  <Card title="airbyte-cdk CLI" icon="wrench">
+    Command-line interface for secrets management, code generation, and more.
+  </Card>
+</CardGroup>
+
+## Installation
+
+### 1. Install `uv`
+
+```bash
+brew install uv
+```
+
+`uv` is the foundation — you'll use it to install the other tools.
+
+### 2. Install Poe the Poet
+
+```bash
+brew tap nat-n/poethepoet
+brew install nat-n/poethepoet/poethepoet
+```
+
+To see available tasks from any connector directory:
+
+```bash
+poe
+```
+
+<Tip>
+Poe task definitions live in the `poe_tasks/` directory at the root of the Airbyte repo. Reading them is a good way to understand what each task does, and you can copy individual steps to run in your IDE.
+</Tip>
+
+### 3. Install the `airbyte-cdk` CLI
+
+```bash
+uv tool install --upgrade 'airbyte-cdk[dev]'
+```
+
+Verify it's working:
+
+```bash
+airbyte-cdk --help
+```
+
+### 4. Install Docker
+
+Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) or [OrbStack](https://orbstack.dev). A full Docker setup guide is outside the scope of this page.
+
+## Common development tasks
+
+### Install connector dependencies
+
+```bash
+# From within a connector directory
+poe install
+```
+
+This is a unified interface — for Python connectors it runs `poetry install --all-extras`; for Java/Kotlin connectors it warms the Gradle cache.
+
+### Run tests
+
+```bash
+# Quick fail-fast test run
+poe test-fast
+
+# All unit tests
+poe test-unit-tests
+
+# All integration tests (may require credentials)
+poe test-integration-tests
+```
+
+<Note>
+You don't have to use Poe to run tests. Running pytest directly from your IDE works fine for Python connectors. Use `poe --help` from a connector directory to see all available tasks for that specific connector.
+</Note>
+
+### Fetch connector secrets
+
+Airbyte stores connector test credentials in Google Secret Manager (GSM). To download them locally:
+
+```bash
+# List available secrets
+airbyte-cdk secrets list
+
+# Download secrets to connector's secrets/ directory
+airbyte-cdk secrets fetch
+# or equivalently
+poe fetch-secrets
+```
+
+Secrets are saved as JSON files in `<connector-dir>/secrets/`. The `secrets/` directory is gitignored — confirm this before committing.
+
+## Managing connector secrets in GSM
+
+When contributing a connector to Airbyte, you'll store test credentials in GSM so CI can run integration tests.
+
+Each secret in GSM must:
+
+1. Be a complete, valid JSON config object
+2. Have a `connector: <connector-name>` label
+3. Have a `filename: <use-case>` label (e.g. `config`, `invalid_config`, `oauth_config`)
+
+Airbyte CI authenticates using two environment variables:
+
+- `GCP_PROJECT_ID` — your GCP project name (stored as a repo-level variable)
+- `GCP_GSM_CREDENTIALS` — service account credentials JSON (stored as a repo-level secret)
+
+## Using Gradle for Java/Kotlin connectors
+
+```bash
+# Run unit tests
+./gradlew :airbyte-integrations:connectors:source-postgres:test
+
+# Run integration tests
+./gradlew :airbyte-integrations:connectors:source-postgres:integrationTestJava
+
+# Or from within a connector directory using Poe
+poe gradle unitTest
+poe gradle integrationTest
+```
+
+<Warning>
+Airbyte is revamping its Java CDK and is not currently accepting new Java CDK connector contributions.
+</Warning>
+
+## PR slash commands
+
+When you open a pull request against the Airbyte repo, maintainers can run the following commands on your behalf:
+
+| Command | Description |
+|---|---|
+| `/bump-version` | Advance connector version and add a changelog entry |
+| `/format-fix` | Fix formatting issues automatically |
+| `/run-connector-tests` | Run tests for modified connectors |
+| `/run-cat-tests` | Run legacy connector acceptance tests |
+| `/build-connector-images` | Build and publish a pre-release Docker image |
+| `/poe` | Run any Poe task |
+
+Slash commands run with main repo permissions, so they're especially useful for fork PRs where secrets aren't available.
+
+## Breaking changes
+
+If your changes break existing connector behavior, follow the [breaking change process](https://docs.airbyte.com/connector-development/connector-breaking-changes) before submitting your PR.

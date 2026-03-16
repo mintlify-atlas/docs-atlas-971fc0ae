@@ -1,0 +1,111 @@
+---
+title: Databricks Destination
+description: Load data into Delta Lake tables on Databricks Lakehouse using Unity Catalog, with support for OAuth and Personal Access Token authentication.
+---
+
+Airbyte's Databricks destination connector syncs data to Delta Lake tables on Databricks Lakehouse. Each stream is written to its own Delta table. Unity Catalog is required.
+
+<Warning>
+You **must** be using Unity Catalog to use this connector.
+</Warning>
+
+<Note>
+OAuth2 authentication is currently only supported on AWS deployments of Databricks. If you're running Databricks on GCP, use a Personal Access Token.
+</Note>
+
+## Prerequisites
+
+- A Databricks workspace with Unity Catalog enabled
+- A SQL warehouse in your workspace
+- A service principal (for OAuth) or personal access token
+- The Unity Catalog path (catalog name) where tables will be created
+
+## Setup guide
+
+<Steps>
+  <Step title="Find your SQL warehouse connection details">
+    1. Open your Databricks workspace console.
+    2. Go to **SQL Warehouses** and open your warehouse.
+    3. Click the **Connection Details** tab.
+    4. Note the **Server Hostname**, **HTTP Path**, and **Port**.
+  </Step>
+  <Step title="Set up authentication">
+    <Tabs>
+      <Tab title="OAuth (recommended for AWS)">
+        Follow the [Databricks OAuth M2M documentation](https://docs.databricks.com/en/dev-tools/auth/oauth-m2m.html) to create a service principal and generate a **Client ID** and **Client Secret**.
+      </Tab>
+      <Tab title="Personal Access Token">
+        1. In your workspace console, click your user icon (top right) > **Settings** > **Developer** > **Manage** under **Access tokens**.
+        2. Click **Generate new token**, enter a description and optionally an expiry, and click **Generate**.
+        3. Copy the token immediately — it won't be shown again.
+      </Tab>
+    </Tabs>
+  </Step>
+  <Step title="Set up the Databricks destination in Airbyte">
+    1. In Airbyte, go to **Destinations** > **+ New destination** and select **Databricks Lakehouse**.
+    2. Enter a name for the destination.
+    3. Enter the **Server Hostname**, **HTTP Path**, and **Port** from your SQL warehouse.
+    4. Enter the **Databricks Unity Catalog Path** (the catalog name).
+    5. Select your authentication method and enter credentials.
+    6. (Optional) Set the **Default Schema** (default: `default`).
+    7. (Optional) Toggle **Purge Staging Files and Tables** (default: enabled).
+    8. Click **Set up destination**.
+  </Step>
+</Steps>
+
+## Supported sync modes
+
+| Mode | Supported |
+|------|-----------|
+| Full Refresh - Overwrite | Yes |
+| Full Refresh - Append | Yes |
+| Full Refresh - Overwrite + Deduped | Yes |
+| Incremental - Append | Yes |
+| Incremental - Append + Deduped | Yes |
+
+## Output schema
+
+Each Delta table includes these metadata columns in addition to your source data:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `_airbyte_raw_id` | STRING | A unique UUID per record |
+| `_airbyte_extracted_at` | TIMESTAMP | When Airbyte read the record from the source |
+| `_airbyte_loaded_at` | TIMESTAMP | When the record was written to Databricks |
+| `_airbyte_generation_id` | BIGINT | See the refreshes documentation |
+
+Airbyte also produces raw tables in the `airbyte_internal` schema. Do not interact with these directly — their format may change without notice.
+
+## Namespace support
+
+This destination supports [namespaces](/using-airbyte/namespaces). The namespace maps to a Databricks schema within the Unity Catalog.
+
+## Configuration reference
+
+<ParamField path="hostname" type="string" required>
+  The Databricks SQL warehouse server hostname.
+</ParamField>
+
+<ParamField path="http_path" type="string" required>
+  The HTTP path to the Databricks SQL warehouse.
+</ParamField>
+
+<ParamField path="port" type="integer" required>
+  The port for the SQL warehouse connection. Default: `443`.
+</ParamField>
+
+<ParamField path="catalog" type="string" required>
+  The Unity Catalog catalog name where tables will be created.
+</ParamField>
+
+<ParamField path="schema" type="string">
+  The default schema within the catalog. Default: `default`.
+</ParamField>
+
+<ParamField path="authentication" type="object" required>
+  Authentication credentials. Either OAuth (`client_id` + `client_secret`) or a Personal Access Token.
+</ParamField>
+
+<ParamField path="purge_staging_data" type="boolean">
+  Whether to delete staging files and tables after loading. Default: `true`.
+</ParamField>

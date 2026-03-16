@@ -1,0 +1,116 @@
+---
+title: Amazon Redshift Destination
+description: Load data into Amazon Redshift by staging files in S3 and issuing COPY commands for high-throughput, production-grade data loading.
+---
+
+Airbyte's certified Amazon Redshift destination connector loads data into Redshift. It follows AWS best practices by staging data in S3 as CSV files and using Redshift's `COPY` command for efficient bulk loading.
+
+## Prerequisites
+
+- An Amazon Redshift cluster
+- An S3 bucket in the same region as your Redshift cluster (to minimize egress costs)
+- AWS IAM credentials with read/write access to the staging S3 bucket
+- A Redshift user with permissions to create schemas and tables in your target database
+
+## Setup guide
+
+<Steps>
+  <Step title="Prepare your Redshift cluster">
+    1. Log in to [AWS Management Console](https://aws.amazon.com/console/) and go to Redshift.
+    2. Create or identify an existing Redshift cluster.
+    3. Optionally, allow connections from Airbyte if Redshift and Airbyte are in separate VPCs.
+    4. Create a staging S3 bucket in the same region as your cluster.
+  </Step>
+  <Step title="Grant permissions to the Airbyte user">
+    Create a user and grant the necessary permissions:
+
+    ```sql
+    -- Grant schema creation
+    GRANT CREATE ON DATABASE <database_name> TO airbyte_user;
+
+    -- Grant table creation in target schema
+    GRANT USAGE, CREATE ON SCHEMA <your_schema> TO airbyte_user;
+
+    -- Grant access to metadata view
+    GRANT SELECT ON TABLE SVV_TABLE_INFO TO airbyte_user;
+    ```
+
+    Airbyte writes to two schemas: your target schema and `airbyte_internal` (for raw data). You can override the raw data schema name in the advanced settings.
+  </Step>
+  <Step title="Set up the Redshift destination in Airbyte">
+    1. In Airbyte, go to **Destinations** > **+ New destination** and select **Redshift**.
+    2. Enter the connector name and fill in all required fields:
+       - **Host**, **Port** (default: 5439), **Database**, **Schema**, **Username**, **Password**
+       - **S3 Bucket Name** and **S3 Bucket Region**
+       - **Access Key ID** and **Secret Access Key** for S3 staging
+    3. Click **Set up destination**.
+  </Step>
+</Steps>
+
+## SSH tunneling
+
+This connector supports connecting to a private Redshift cluster via an SSH bastion host. Enter the bastion host, port, and credentials in the destination configuration. Note that S3 staging does not use the SSH tunnel — only the SQL connection to Redshift uses it.
+
+## Supported sync modes
+
+| Mode | Supported |
+|------|-----------|
+| Full Refresh - Overwrite | Yes |
+| Full Refresh - Append | Yes |
+| Full Refresh - Overwrite + Deduped | Yes |
+| Incremental - Append | Yes |
+| Incremental - Append + Deduped | Yes |
+
+## Configuration reference
+
+<ParamField path="host" type="string" required>
+  The Redshift cluster hostname.
+</ParamField>
+
+<ParamField path="port" type="integer" required>
+  The Redshift cluster port. Default: `5439`.
+</ParamField>
+
+<ParamField path="database" type="string" required>
+  The name of the target database.
+</ParamField>
+
+<ParamField path="schema" type="string" required>
+  The target schema where tables will be created.
+</ParamField>
+
+<ParamField path="username" type="string" required>
+  The Redshift username.
+</ParamField>
+
+<ParamField path="password" type="string" required>
+  The Redshift user password.
+</ParamField>
+
+<ParamField path="s3_bucket_name" type="string" required>
+  The name of the S3 bucket used for staging data before loading into Redshift.
+</ParamField>
+
+<ParamField path="s3_bucket_region" type="string" required>
+  The AWS region of the S3 bucket. Should match the Redshift cluster region.
+</ParamField>
+
+<ParamField path="access_key_id" type="string" required>
+  AWS Access Key ID with read/write access to the staging S3 bucket.
+</ParamField>
+
+<ParamField path="secret_access_key" type="string" required>
+  AWS Secret Access Key corresponding to the Access Key ID.
+</ParamField>
+
+<ParamField path="bucket_path" type="string">
+  Optional subdirectory within the S3 bucket for staging files.
+</ParamField>
+
+<ParamField path="purge_staging_data" type="boolean">
+  Whether to delete staging files from S3 after loading. Default: `true`.
+</ParamField>
+
+<ParamField path="s3_filename_pattern" type="string">
+  Optional filename pattern for staging files. Supports placeholders: `{date}`, `{timestamp}`, `{part_number}`, `{sync_id}`, `{format_extension}`.
+</ParamField>

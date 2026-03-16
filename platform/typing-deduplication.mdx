@@ -1,0 +1,93 @@
+---
+title: "Typing and Deduplication"
+description: "How Airbyte cleans and deduplicates data in destination warehouses"
+---
+
+# Typing and deduplication
+
+<Warning>
+Typing and Deduplication is currently being phased out in favor of **Direct-Load tables**. With Direct Loads, there is no intermediate raw table — top-level fields are typed during insert, and only a single destination table is maintained per stream.
+</Warning>
+
+Typing and deduplication (T+D) is the default method of transforming data within data warehouse and database destinations after replication. It is part of **Destinations V2**.
+
+## What Destinations V2 provides
+
+- **One-to-one table mapping:** Data in one stream always maps to one table — no sub-tables
+- **Per-row error handling via `_airbyte_meta`:** Typing errors populate the `_airbyte_meta` column instead of failing the sync
+- **Internal schema:** All raw tables live in the `airbyte_internal` schema, not in your target schema
+- **Incremental delivery:** Data is incrementally delivered to final tables — no waiting hours for the first rows
+
+## Raw and final tables
+
+Airbyte maintains two tables per stream:
+
+| Table | Location | Contents |
+|-------|----------|----------|
+| Raw table | `airbyte_internal` schema | All records as raw JSON blobs |
+| Final table | Your target schema | Typed, deduplicated data |
+
+### Example
+
+For a stream `users` with schema `{id: integer, name: string}`, Airbyte creates:
+
+**Raw table** (`airbyte_internal.users_raw`):
+```json
+{
+  "_airbyte_raw_id": "uuid",
+  "_airbyte_data": "{\"id\": 1, \"name\": \"Alice\"}",
+  "_airbyte_loaded_at": "2024-01-15T10:00:00Z"
+}
+```
+
+**Final table** (`your_schema.users`):
+| `_airbyte_raw_id` | `_airbyte_extracted_at` | `_airbyte_meta` | `id` | `name` |
+|---|---|---|---|---|
+| uuid | 2024-01-15T10:00:00Z | `{"changes": []}` | 1 | Alice |
+
+## The `_airbyte_meta` column
+
+The `_airbyte_meta` column records per-row issues without failing the sync:
+
+```sql
+-- Find rows with typing errors
+SELECT * FROM users
+WHERE json_array_length(_airbyte_meta ->> 'changes') > 0;
+
+-- Count clean rows only
+SELECT COUNT(*) FROM users
+WHERE json_array_length(_airbyte_meta ->> 'changes') = 0;
+```
+
+**Types of changes recorded:**
+
+- **Typing changes:** The source declared `id` as integer, but a string was returned
+- **Size changes:** The record is too large for the destination column (e.g., Redshift SUPER column 16MB limit)
+
+<Tip>
+When using data downstream from Airbyte, generally include only rows without errors unless your use case specifically needs all records (e.g., for counting purposes).
+</Tip>
+
+## Airbyte metadata fields
+
+Every final table includes these Airbyte-managed columns:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `_airbyte_raw_id` | string | Unique ID for each record from the raw table |
+| `_airbyte_extracted_at` | timestamp | When the record was extracted from the source |
+| `_airbyte_loaded_at` | timestamp | When the record was loaded into the raw table |
+| `_airbyte_meta` | object | Per-row error and change information |
+
+## Supported destinations
+
+Typing and deduplication is supported in:
+
+- BigQuery
+- Snowflake
+- Redshift
+- PostgreSQL
+- DuckDB
+- Databricks
+
+Check the individual destination documentation for details.

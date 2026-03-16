@@ -1,0 +1,303 @@
+---
+title: 'Helm on Kubernetes'
+description: 'Deploy Airbyte into any Kubernetes cluster using the official Helm chart.'
+---
+
+This guide walks through deploying Airbyte into any Kubernetes cluster using Helm. It covers a default installation and shows you how to customize the deployment for your cloud provider and integrations.
+
+<Info>
+This guide assumes you already have a running Kubernetes cluster. For local testing, [Docker Desktop](https://www.docker.com/products/docker-desktop/) with Kubernetes enabled works well, as do kind, k3s, and colima. For cloud deployments, see the [AWS](/deploy/aws), [GCP](/deploy/gcp), or [Azure](/deploy/azure) infrastructure guides.
+</Info>
+
+<Note>
+Self-Managed Enterprise customers should follow the [Enterprise setup](/deploy/enterprise-setup) guide instead of this one.
+</Note>
+
+## Prerequisites
+
+- A running Kubernetes cluster
+- [Helm client](https://helm.sh/docs/intro/install/) installed and on your PATH
+- `kubectl` configured to connect to your cluster
+
+## Step 1: Add the Helm repository
+
+<Tabs>
+  <Tab title="Helm chart V2 (recommended)">
+    ```bash
+    helm repo add airbyte-v2 https://airbytehq.github.io/charts
+    helm repo update
+    ```
+
+    To browse all available charts:
+
+    ```bash
+    helm search repo airbyte-v2
+    ```
+
+    Example output:
+
+    ```text
+    NAME                CHART VERSION   APP VERSION   DESCRIPTION
+    airbyte-v2/airbyte  2.0.7           1.8.0         Helm chart to deploy airbyte
+    ```
+  </Tab>
+  <Tab title="Helm chart V1">
+    ```bash
+    helm repo add airbyte https://airbytehq.github.io/helm-charts
+    helm repo update
+    ```
+
+    To browse all available charts:
+
+    ```bash
+    helm search repo airbyte
+    ```
+
+    Example output:
+
+    ```text
+    NAME                                    CHART VERSION   APP VERSION   DESCRIPTION
+    airbyte/airbyte                         1.8.0           1.8.0         Helm chart to deploy airbyte
+    airbyte/airbyte-bootloader              1.8.0           1.8.0         Helm chart to deploy airbyte-bootloader
+    airbyte/server                          1.8.0           1.8.0         Helm chart to deploy airbyte-server
+    airbyte/worker                          1.8.0           1.8.0         Helm chart to deploy airbyte-worker
+    airbyte/workload-launcher               1.8.0           1.8.0         Helm chart to deploy airbyte-workload-launcher
+    ```
+  </Tab>
+</Tabs>
+
+## Step 2: Create a namespace
+
+<Tabs>
+  <Tab title="Helm chart V2 (recommended)">
+    ```bash
+    kubectl create namespace airbyte-v2
+    ```
+  </Tab>
+  <Tab title="Helm chart V1">
+    ```bash
+    kubectl create namespace airbyte
+    ```
+  </Tab>
+</Tabs>
+
+You can use a different namespace name, but update all subsequent commands accordingly.
+
+## Step 3: Create a values.yaml file
+
+Create a `values.yaml` file to configure your Airbyte installation. You only need to specify the values you want to override — you do not need to copy the entire chart values file.
+
+A minimal example:
+
+```yaml
+global:
+  airbyteUrl: https://airbyte.company.example
+```
+
+See the [values.yaml reference](/deploy/helm-kubernetes#values-reference) for all available options.
+
+## Step 4: Configure Kubernetes secrets (optional)
+
+If you want to integrate Airbyte with external services — such as S3, GCS, or a secrets manager — you must create a Kubernetes secret before installing. See [Managing secrets](/deploy/secrets) for instructions.
+
+Before configuring cloud integrations, set up the required IAM policies:
+
+- [AWS policies](/deploy/aws)
+- [GCP roles](/deploy/gcp)
+
+Available integrations:
+
+- State and logging storage (S3, GCS, Azure Blob Storage)
+- External secrets management (AWS Secrets Manager, GCP Secret Manager, Azure Key Vault)
+- External database (PostgreSQL)
+- Ingress configuration
+
+## Step 5: Install Airbyte
+
+<Tabs>
+  <Tab title="Helm chart V2 (recommended)">
+    First, find the chart version that corresponds to the Airbyte platform version you want:
+
+    ```bash
+    helm search repo airbyte-v2 --versions
+    ```
+
+    Example output:
+
+    ```text
+    NAME                CHART VERSION   APP VERSION   DESCRIPTION
+    airbyte-v2/airbyte  2.0.18          2.0.0         Helm chart to deploy airbyte
+    airbyte-v2/airbyte  2.0.17          1.8.5         Helm chart to deploy airbyte
+    airbyte-v2/airbyte  2.0.16          1.8.4         Helm chart to deploy airbyte
+    airbyte-v2/airbyte  2.0.9           1.8.0         Helm chart to deploy airbyte
+    ```
+
+    Then install:
+
+    ```bash
+    helm install airbyte airbyte-v2/airbyte \
+      --namespace airbyte-v2 \
+      --values ./values.yaml \
+      --version 2.0.18
+    ```
+  </Tab>
+  <Tab title="Helm chart V1">
+    ```bash
+    helm install airbyte airbyte/airbyte \
+      --namespace airbyte \
+      --values ./values.yaml
+    ```
+  </Tab>
+</Tabs>
+
+## Step 6: Access the Airbyte UI
+
+After installation, set up a port-forward to access the UI:
+
+<Tabs>
+  <Tab title="Helm chart V2 (recommended)">
+    ```bash
+    kubectl -n airbyte-v2 port-forward deployment/airbyte-server 8080:8001
+    ```
+  </Tab>
+  <Tab title="Helm chart V1">
+    ```bash
+    kubectl -n airbyte port-forward deployment/airbyte-server 8080:8001
+    ```
+  </Tab>
+</Tabs>
+
+Open `http://127.0.0.1:8080` in your browser.
+
+<Tip>
+For a more permanent setup, configure an ingress. For local deployments, NGINX is a simple option. See the ingress configuration section in the [Enterprise implementation guide](/deploy/enterprise-implementation#configuring-ingress) for full examples.
+</Tip>
+
+## Upgrade Airbyte
+
+To upgrade to a newer version, update your Helm repo and run `helm upgrade`:
+
+```bash
+helm repo update
+```
+
+<Tabs>
+  <Tab title="Helm chart V2 (recommended)">
+    ```bash
+    helm upgrade airbyte airbyte-v2/airbyte \
+      --namespace airbyte-v2 \
+      --values ./values.yaml \
+      --version 2.0.18
+    ```
+  </Tab>
+  <Tab title="Helm chart V1">
+    ```bash
+    helm upgrade airbyte airbyte/airbyte \
+      --namespace airbyte \
+      --values ./values.yaml
+    ```
+  </Tab>
+</Tabs>
+
+## Values reference
+
+The `values.yaml` file controls every aspect of the Airbyte deployment. Key top-level sections include:
+
+| Section | Description |
+|---|---|
+| `global` | Global settings: URL, auth, database, storage, image registry, metrics |
+| `webapp` | Webapp replica count, resources, ingress |
+| `server` | Server replica count, resources, log level |
+| `worker` | Worker replica count, resources, HPA |
+| `workload-launcher` | Workload launcher configuration, orchestrator/sidecar images |
+| `temporal` | Temporal workflow engine settings |
+| `postgresql` | Internal PostgreSQL database (disable for external DB) |
+| `ingress` | Top-level ingress resource for the entire deployment |
+
+### Global storage configuration
+
+<Tabs>
+  <Tab title="S3">
+    ```yaml
+    global:
+      storage:
+        type: s3
+        storageSecretName: airbyte-config-secrets
+        bucket:
+          log: airbyte-bucket
+          state: airbyte-bucket
+          workloadOutput: airbyte-bucket
+        s3:
+          region: us-east-1
+          authenticationType: credentials # or instanceProfile
+    ```
+  </Tab>
+  <Tab title="GCS">
+    ```yaml
+    global:
+      storage:
+        type: gcs
+        storageSecretName: airbyte-config-secrets
+        bucket:
+          log: airbyte-bucket
+          state: airbyte-bucket
+          workloadOutput: airbyte-bucket
+        gcs:
+          projectId: my-project-id
+          credentialsJson: /secrets/gcs-log-creds/gcp.json
+    ```
+  </Tab>
+  <Tab title="Azure Blob">
+    ```yaml
+    global:
+      storage:
+        type: azure
+        storageSecretName: airbyte-config-secrets
+        bucket:
+          log: airbyte-bucket
+          state: airbyte-bucket
+          workloadOutput: airbyte-bucket
+        azure:
+          connectionStringSecretKey: azure-blob-store-connection-string
+    ```
+  </Tab>
+  <Tab title="MinIO (default)">
+    ```yaml
+    global:
+      storage:
+        type: minio # default
+    ```
+  </Tab>
+</Tabs>
+
+### External database configuration
+
+For production deployments, use an external PostgreSQL instance:
+
+```yaml
+postgresql:
+  enabled: false
+
+global:
+  database:
+    secretName: airbyte-config-secrets
+    host: database.internal
+    port: "5432"
+    database: airbyte
+    user: airbyte
+    passwordSecretKey: database-password
+```
+
+### Auth configuration
+
+```yaml
+global:
+  auth:
+    enabled: false
+    instanceAdmin:
+      secretName: airbyte-config-secrets
+      firstName: ""
+      lastName: ""
+      emailSecretKey: instance-admin-email
+      passwordSecretKey: instance-admin-password
+```

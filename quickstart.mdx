@@ -1,80 +1,207 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Deploy a local instance of Airbyte and start moving data in minutes.
 ---
 
-## Get started in three steps
+This guide walks you through deploying Airbyte Core, Airbyte's open source product, on your local machine. Setup takes only a few minutes, and you can start moving data right away.
 
-Get your documentation site running locally and make your first customization.
+<Info>
+This quickstart is for people who want to manage their own Airbyte instance. If you'd rather not self-manage, sign up for an [Airbyte Cloud](https://cloud.airbyte.com/signup) trial and start syncing data immediately.
+</Info>
 
-### Step 1: Set up your local environment
+## Before you start
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+For best performance, run Airbyte on a machine with 4 or more CPUs and at least 8 GB of memory. Airbyte can also run with 2 CPUs and 8 GB of memory in low-resource mode — this quickstart covers both options.
 
-### Step 2: Deploy your changes
+<Steps>
+  <Step title="Install Docker Desktop">
+    Install Docker Desktop on your machine if you haven't already. Follow the steps for your operating system:
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    - [Mac](https://docs.docker.com/desktop/install/mac-install/)
+    - [Windows](https://docs.docker.com/desktop/install/windows-install/)
+    - [Linux](https://docs.docker.com/desktop/install/linux-install/)
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+    <Note>
+    Airbyte runs on Kubernetes. When you deploy Airbyte locally, it uses Docker to create a Kubernetes cluster on your computer. You don't need to configure Docker — just open it and let it run in the background.
+    </Note>
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+    **Linux on a headless virtual machine?** Use [Docker Engine](https://docs.docker.com/engine/install/) instead of Docker Desktop for a simpler setup.
+  </Step>
 
-### Step 3: Go live
+  <Step title="Install abctl">
+    `abctl` is Airbyte's command-line tool for deploying and managing Airbyte.
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+    <Tabs>
+      <Tab title="Mac / Linux (fast)">
+        Run the following command in your terminal. Enter your password if prompted.
 
-## Next steps
+        ```shell
+        curl -LsfS https://get.airbyte.com | bash -
+        ```
 
-Now that you have your docs running, explore these key features:
+        When installation completes, you see `abctl install succeeded.`
+      </Tab>
+      <Tab title="Mac (Homebrew)">
+        Use [Homebrew](https://brew.sh/) to install and keep `abctl` up to date.
+
+        ```bash
+        brew tap airbytehq/tap
+        brew install abctl
+        ```
+
+        To upgrade later:
+
+        ```bash
+        brew upgrade abctl
+        ```
+      </Tab>
+      <Tab title="Linux (manual)">
+        1. Check your processor architecture:
+
+           ```bash
+           uname -m
+           ```
+
+           `x86_64` → download the **linux-amd64** release. `aarch64` or similar → download the **linux-arm64** release.
+
+        2. Download the [latest Linux release](https://github.com/airbytehq/abctl/releases/latest).
+
+        3. Extract the archive:
+
+           ```bash
+           tar -xvzf {name-of-file-downloaded.linux-*.tar.gz}
+           ```
+
+        4. Make the binary executable and move it to your PATH:
+
+           ```bash
+           chmod +x abctl/abctl
+           sudo mv abctl /usr/local/bin
+           ```
+
+        5. Verify the installation:
+
+           ```bash
+           abctl version
+           ```
+      </Tab>
+      <Tab title="Windows">
+        1. Check your processor type: press **Windows + I**, click **System > About**, and look at the **Processor** field. `AMD` → download **windows-amd64**. `ARM` → download **windows-arm64**.
+
+        2. Download the [latest Windows release](https://github.com/airbytehq/abctl/releases/latest) and extract the zip file to a location of your choice. Copy the folder path.
+
+        3. Add the folder to your `Path` environment variable:
+           - Click **Start** and type `environment`.
+           - Click **Edit the system environment variables**.
+           - Click **Environment Variables**, find **Path**, and click **Edit**.
+           - Click **New**, paste the folder path, and click **OK**.
+
+        4. Open a new Command Prompt or PowerShell window and verify:
+
+           ```bash
+           abctl version
+           ```
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Run Airbyte">
+    Make sure Docker Desktop is running, then choose the installation mode that fits your environment.
+
+    <Tabs>
+      <Tab title="Run locally">
+        ```bash
+        abctl local install
+        ```
+      </Tab>
+      <Tab title="Run over HTTP">
+        To make Airbyte accessible outside `localhost`, specify a fully qualified domain name:
+
+        ```bash
+        abctl local install --host example.com
+        ```
+
+        If you're on an insecure (non-HTTPS) connection, disable secure cookies to avoid a login error:
+
+        ```bash
+        abctl local install --host example.com --insecure-cookies
+        ```
+      </Tab>
+      <Tab title="Run in low-resource mode">
+        For machines with fewer than 4 CPUs, use the `--low-resource-mode` flag. Note that the Connector Builder is not available in this mode.
+
+        ```bash
+        abctl local install --low-resource-mode
+        ```
+      </Tab>
+    </Tabs>
+
+    <Note>
+    Installation may take up to 30 minutes depending on your internet connection. If you see `Encountered an issue deploying Airbyte` with status code `503`, allow the installation to continue — it can complete even with resource warnings.
+    </Note>
+
+    When installation completes, Airbyte opens in your browser at [http://localhost:8000](http://localhost:8000) (or the host you specified). Airbyte will prompt you to log in — continue to the next step to get your password.
+  </Step>
+
+  <Step title="Set up authentication">
+    1. Retrieve your default credentials:
+
+       ```bash
+       abctl local credentials
+       ```
+
+       The output looks like this:
+
+       ```shell
+       Credentials:
+       Email: user@example.com
+       Password: a-random-password
+       Client-Id: 03ef466c-5558-4ca5-856b-4960ba7c161b
+       Client-Secret: m2UjnDO4iyBQ3IsRiy5GG3LaZWP6xs9I
+       ```
+
+    2. Use the email and password to log into Airbyte in your browser.
+
+    3. Optionally, set your own password:
+
+       ```bash
+       abctl local credentials --password YourStrongPasswordExample
+       ```
+
+       Your Airbyte server restarts. Use the new password to log in again.
+  </Step>
+</Steps>
+
+## What's next
+
+You now have a fully functional local instance of Airbyte. Here are a few things to try:
 
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Add a source" icon="database" href="/using-airbyte/add-a-source">
+    Connect to a database, API, or file system to pull data from.
+  </Card>
+  <Card title="Add a destination" icon="warehouse" href="/using-airbyte/add-a-destination">
+    Connect to a data warehouse, lake, or database to write data to.
+  </Card>
+  <Card title="Set up a connection" icon="link" href="/using-airbyte/set-up-a-connection">
+    Create an automated pipeline between a source and a destination.
+  </Card>
+  <Card title="Deploy Airbyte" icon="cloud" href="/deploy/overview">
+    Move Airbyte to AWS, Google Cloud, Azure, or a single VM when you're ready to scale.
+  </Card>
 </CardGroup>
 
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>
+## Uninstall Airbyte
+
+To stop all containers but keep your data:
+
+```shell
+abctl local uninstall
+```
+
+To stop all containers and delete all data:
+
+```shell
+abctl local uninstall --persisted
+rm -rf ~/.airbyte/abctl
+```

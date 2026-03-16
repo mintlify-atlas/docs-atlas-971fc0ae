@@ -1,0 +1,75 @@
+---
+title: 'Deployment overview'
+description: 'Choose the right deployment option for Airbyte based on your infrastructure and scale requirements.'
+---
+
+Airbyte runs on Kubernetes and can be deployed to a cloud provider such as AWS, GCP, or Azure, onto a single VM, or locally on your own machine. This section covers every supported deployment path.
+
+<Note>
+If you are an Airbyte Self-Managed Enterprise customer, skip the community deployment guides and go directly to [Self-Managed Enterprise setup](/deploy/enterprise-setup).
+</Note>
+
+## Deployment options
+
+<CardGroup cols={2}>
+  <Card title="abctl (local)" icon="terminal" href="/deploy/abctl">
+    Use the Airbyte CLI to spin up a local Kubernetes cluster inside Docker. The fastest way to get Airbyte running on any machine that has Docker installed.
+  </Card>
+  <Card title="Helm on Kubernetes" icon="helm" href="/deploy/helm-kubernetes">
+    Deploy Airbyte into any existing Kubernetes cluster using the official Helm chart. Recommended for production workloads.
+  </Card>
+  <Card title="AWS" icon="aws" href="/deploy/aws">
+    Infrastructure guidance and IAM policies for deploying Airbyte on Amazon EKS or an EC2 instance.
+  </Card>
+  <Card title="GCP" icon="google" href="/deploy/gcp">
+    Service account roles and infrastructure guidance for deploying Airbyte on Google Kubernetes Engine.
+  </Card>
+  <Card title="Azure" icon="microsoft" href="/deploy/azure">
+    Infrastructure guidance for deploying Airbyte on Azure Kubernetes Service.
+  </Card>
+  <Card title="Self-Managed Enterprise" icon="building" href="/deploy/enterprise-setup">
+    Deploy Airbyte with SSO, multi-workspace support, role-based access control, and audit logging.
+  </Card>
+</CardGroup>
+
+## How Airbyte deploys
+
+Airbyte is composed of several Kubernetes components:
+
+- **server** — the main API and control plane
+- **webapp** — the browser-based UI
+- **worker** — handles sync orchestration
+- **workload-launcher** — manages connector pods (check, discover, read, write, orchestrator)
+- **temporal** — workflow engine for sync job scheduling
+- **bootloader** — runs database migrations on startup
+- **postgresql** — default internal database (replace with an external instance in production)
+
+All components are packaged in Airbyte's [Helm chart](https://airbytehq.github.io/helm-charts/). For production deployments, Airbyte recommends:
+
+- An external PostgreSQL database (AWS RDS, GCP Cloud SQL, or equivalent)
+- External object storage for logs and state (S3, GCS, or Azure Blob Storage)
+- An external secrets manager (AWS Secrets Manager, GCP Secret Manager, or Azure Key Vault)
+- An ingress controller for HTTPS access
+
+## Helm chart versions
+
+Airbyte maintains two Helm chart generations:
+
+| Chart | Repository | Notes |
+|---|---|---|
+| Helm chart V1 | `https://airbytehq.github.io/helm-charts` | Current stable chart |
+| Helm chart V2 | `https://airbytehq.github.io/charts` | Recommended for new deployments |
+
+Airbyte recommends using Helm chart V2 for all new deployments. V2 will become mandatory in the future.
+
+## Choosing a deployment path
+
+| Scenario | Recommended path |
+|---|---|
+| Local development or evaluation | [abctl](/deploy/abctl) |
+| Production on your own Kubernetes cluster | [Helm on Kubernetes](/deploy/helm-kubernetes) |
+| Production on AWS | [AWS infrastructure](/deploy/aws) + Helm |
+| Production on GCP | [GCP infrastructure](/deploy/gcp) + Helm |
+| Production on Azure | [Azure infrastructure](/deploy/azure) + Helm |
+| Enterprise with SSO and multi-workspace | [Self-Managed Enterprise](/deploy/enterprise-setup) |
+| Legacy Docker Compose | See [Docker Compose (legacy)](/deploy/docker-compose) |

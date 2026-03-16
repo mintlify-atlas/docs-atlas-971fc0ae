@@ -1,0 +1,133 @@
+---
+title: "Connector Development Best Practices"
+description: "Quality guidelines for building reliable, maintainable Airbyte connectors."
+---
+
+These guidelines describe what it takes for a connector to reach "Airbyte Certified" status. Following them is not required for your contribution to be accepted, but connectors that meet this bar are labeled Certified and are expected to perform reliably in all production use cases.
+
+## Core principles
+
+**1. Reliability and usability over more features.**
+A connector that works solidly for 3 streams is better than one that covers 10 streams unreliably. Make what you build work well before expanding scope.
+
+**2. Fail fast.**
+A user should not be able to configure something that won't work. Surface problems at connection setup time, not during the first sync.
+
+**3. Fail actionably.**
+When something goes wrong and the user can fix it, tell them exactly what to do. When it's not their fault, make it easy for them to provide useful debugging information.
+
+## Priority order for connector goals
+
+1. **Correct input leads to successful sync.** Any failure should be immediately visible and easy to report.
+2. **Bad input produces an actionable error message.** "Invalid credentials" is not actionable. "Your API token does not have read access to the Employees endpoint" is.
+3. **Implement incremental sync where possible.** Full syncs on large data sources are expensive for both the source API and Airbyte infrastructure.
+4. **Communicate status frequently.** Emit a log message at least every 5 minutes so users know the connector is still running.
+5. **Support as many entities as feasible.** Covering all streams is better than a narrow subset, but only after the above four goals are met.
+
+## Check connection
+
+The `check` operation is your connector's first handshake with the user. Make it count.
+
+<CardGroup cols={2}>
+  <Card title="Verify permissions upfront" icon="shield-check">
+    Check that the credentials have read access to the entities they'll need. Don't wait for the first sync to discover a permission problem.
+  </Card>
+  <Card title="Provide actionable feedback" icon="comment">
+    Return specific error messages. "Cannot connect" forces users to guess. "Your username or password is incorrect" tells them exactly what to fix.
+  </Card>
+</CardGroup>
+
+**Non-actionable messages (avoid):**
+- "Can't connect"
+- "Authentication failed"
+- "Error 403"
+
+**Actionable messages (prefer):**
+- "Your username/password combination is incorrect"
+- "Unable to reach database host: verify that no firewall rules are blocking Airbyte"
+- "API token is missing the `read:contacts` scope required for the Contacts stream"
+
+## Rate limiting
+
+Most APIs enforce rate limits. Your connector must handle them gracefully without failing the sync process.
+
+```python
+# Python CDK: override should_retry and backoff_time
+def should_retry(self, response: requests.Response) -> bool:
+    return response.status_code in (429, 500, 502, 503, 504)
+
+def backoff_time(self, response: requests.Response) -> Optional[float]:
+    # Prefer Retry-After header when available
+    if "Retry-After" in response.headers:
+        return float(response.headers["Retry-After"])
+    return None  # Fall back to default exponential backoff
+```
+
+In Connector Builder, configure a response filter with `HTTP codes: [429]`, action `RATE_LIMITED`, and a backoff strategy matching the API's documentation.
+
+## Incremental sync
+
+Implement incremental sync whenever the API supports it. This:
+
+- Reduces load on the source API
+- Speeds up syncs significantly for large datasets
+- Enables [Append + Deduped](/using-airbyte/sync-modes) sync mode in destinations
+
+For APIs where every record has an `updated_at` field and the API accepts a date filter, incremental sync is almost always feasible.
+
+## Integration testing
+
+Prove functionality through tests. The [Standard Test Suite (CAT)](https://docs.airbyte.com/connector-development/testing-connectors/connector-acceptance-tests-reference) is required but not sufficient on its own.
+
+<Tabs>
+  <Tab title="All connectors">
+    - Test all supported sync modes
+    - Verify the check connection operation returns clear errors for invalid credentials
+    - Test that the connector handles empty result sets gracefully
+  </Tab>
+  <Tab title="API connectors">
+    - Validate that every stream returns records
+    - If rate limit testing causes problems, schedule it on a less frequent CI cadence
+    - Test incremental sync by verifying state is correctly persisted and used on subsequent syncs
+  </Tab>
+  <Tab title="Database connectors">
+    - Test replication for **all supported data types** in both `read` and `discover` operations
+    - Test handling of NULL values, empty tables, and large text fields
+  </Tab>
+</Tabs>
+
+**Thoroughly test edge cases.** The standard test suite can't cover everything. When in doubt, write a connector-specific test.
+
+## Schema quality
+
+- Declare schemas that are as strict as possible given the API's documented behavior
+- Use `["string", "null"]` for fields that are sometimes absent
+- Use `["string", "number"]` for fields where the API inconsistently returns different types
+- Set `primary_key` on every stream that has a unique identifier
+- For streams without a natural primary key, use a composite key of fields that together are unique
+
+## Breaking changes
+
+When updating an existing connector in a way that breaks existing syncs, follow the [breaking change process](https://docs.airbyte.com/connector-development/connector-breaking-changes):
+
+1. Bump the major version
+2. Add a `breakingChanges` entry to `metadata.yaml` with a clear message and upgrade deadline
+3. Give users enough time to migrate (typically at least 2 weeks)
+
+```yaml
+releases:
+  breakingChanges:
+    2.0.0:
+      message: "The `orders` stream now uses `updated_at` as the cursor field instead of `created_at`.
+        Existing connections will need a full reset after upgrading."
+      upgradeDeadline: "2024-03-01"
+```
+
+## Maintaining connectors
+
+Once a connector is published:
+
+- Monitor for API changes that could break the connector
+- Respond to user-reported issues in a timely manner
+- When the upstream API deprecates an auth method or endpoint, update the connector before the deadline and document the breaking change
+- Keep dependencies up to date to pick up security fixes in the CDK

@@ -1,0 +1,158 @@
+---
+title: HubSpot Source
+description: Replicate CRM, marketing, and sales data from HubSpot using OAuth or a Private App access token.
+---
+
+Airbyte's certified HubSpot source connector replicates CRM objects, marketing data, and engagement records from HubSpot. It supports both incremental and full refresh sync for all major HubSpot hubs.
+
+## Prerequisites
+
+- A HubSpot account
+- For Airbyte Cloud: OAuth (recommended) or a Private App with an access token
+- For Airbyte Open Source: a Private App with an access token (recommended) or OAuth credentials
+
+## Setup guide
+
+### Step 1: Configure authentication
+
+<Tabs>
+  <Tab title="OAuth (Airbyte Cloud, recommended)">
+    OAuth is the simplest authentication method for Airbyte Cloud. When you set up the connector, click **Authenticate your HubSpot account** to authorize via the OAuth flow. Airbyte requests the following scopes: `crm.objects.*`, `content`, `forms`, `tickets`, `e-commerce`, `automation`, `business-intelligence`, `sales-email-read`, and `oauth`.
+
+    <Note>
+    If you see an error saying `An invalid scope name was provided`, close the popup and retry authentication.
+    </Note>
+  </Tab>
+  <Tab title="Private App (recommended for Open Source)">
+    1. In HubSpot, go to **Settings** > **Integrations** > **Private Apps** and create a new app.
+    2. On the **Scopes** tab, add the scopes needed for the streams you want to sync. See the scopes table below.
+    3. Click **Create app** and copy the **Access token**.
+    4. In Airbyte, select **Private App** as the authentication method and paste the access token.
+  </Tab>
+</Tabs>
+
+### Step 2: Configure required scopes (Private App only)
+
+Each stream requires specific HubSpot scopes. Add the scopes for every stream you want to sync:
+
+| Stream | Required scope |
+|--------|---------------|
+| `contacts` | `crm.objects.contacts.read` |
+| `companies` | `crm.objects.companies.read`, `crm.schemas.companies.read` |
+| `deals` | `crm.objects.deals.read`, `crm.schemas.deals.read` |
+| `tickets` | `tickets` |
+| `campaigns` | `content` |
+| `forms`, `form_submissions` | `forms` |
+| `engagements` | `crm.objects.companies.read`, `crm.objects.contacts.read`, `crm.objects.deals.read`, `tickets`, `e-commerce` |
+| `engagements_emails` | `sales-email-read` |
+| `line_items`, `products` | `e-commerce` |
+| `workflows` | `automation` |
+| `owners` | `crm.objects.owners.read` |
+| `goals` | `crm.objects.goals.read` |
+| `leads` | `crm.objects.leads.read`, `crm.schemas.leads.read` |
+| `account_details` | `oauth` |
+| Custom CRM Objects | `crm.objects.custom.read` |
+
+### Step 3: Set up the connector in Airbyte
+
+1. In Airbyte, go to **Sources** > **+ New source** and select **HubSpot**.
+2. Enter a name for the connector.
+3. Select your authentication method and complete the auth flow.
+4. (Optional) Set a **Start date** (`yyyy-mm-ddThh:mm:ssZ`). Data added on or after this date will be replicated. Defaults to `2006-06-01T00:00:00Z` (HubSpot's founding date).
+5. (Optional) Set a **Lookback window** in minutes to re-fetch data before the previous sync cursor. This helps capture missing records due to HubSpot API behavior.
+6. Click **Set up source**.
+
+## Supported sync modes
+
+| Mode | Supported |
+|------|-----------|
+| Full Refresh | Yes |
+| Incremental | Yes |
+
+## Supported streams
+
+<Accordion title="CRM streams">
+  - `campaigns` (Client-Side Incremental)
+  - `companies` (Incremental)
+  - `contact_lists` (Incremental)
+  - `contacts` (Incremental)
+  - `deal_pipelines` (Client-Side Incremental)
+  - `deals` (Incremental, includes Contact associations)
+  - `deals_archived` (Incremental)
+  - `goals` (Incremental)
+  - `leads` (Incremental)
+  - `line_items` (Incremental)
+  - `owners` / `owners_archived` (Client-Side Incremental)
+  - `products` (Incremental)
+  - `tickets` / `ticket_pipelines` (Incremental)
+</Accordion>
+
+<Accordion title="Marketing streams">
+  - `email_events` (Incremental)
+  - `email_subscriptions` (Full Refresh)
+  - `forms` / `form_submissions` (Client-Side Incremental)
+  - `marketing_emails` (Incremental)
+  - `subscription_changes` (Incremental)
+</Accordion>
+
+<Accordion title="Engagement streams">
+  - `engagements` (Incremental)
+  - `engagements_calls` (Incremental)
+  - `engagements_emails` (Incremental)
+  - `engagements_meetings` (Incremental)
+  - `engagements_notes` (Incremental)
+  - `engagements_tasks` (Incremental)
+</Accordion>
+
+<Accordion title="Property history streams">
+  - `contacts_property_history` (Client-Side Incremental)
+  - `companies_property_history` (Client-Side Incremental)
+  - `deals_property_history` (Client-Side Incremental)
+</Accordion>
+
+<Accordion title="Web analytics streams (experimental)">
+  These streams use the HubSpot Web Analytics API which is currently in beta:
+  - `contacts_web_analytics`, `companies_web_analytics`, `deals_web_analytics`
+  - `tickets_web_analytics`, `goals_web_analytics`, `line_items_web_analytics`
+  - And more engagement web analytics streams
+</Accordion>
+
+<Accordion title="Other streams">
+  - `account_details` (Full Refresh)
+  - `workflows` (Client-Side Incremental)
+  - Custom CRM Objects (Incremental)
+</Accordion>
+
+## Rate limits
+
+| HubSpot tier | Burst limit | Daily limit |
+|-------------|------------|------------|
+| Free & Starter | 100 / 10 sec | 250,000 |
+| Professional & Enterprise | 150 / 10 sec | 500,000 |
+| API add-on (any tier) | 200 / 10 sec | 1,000,000 |
+
+## Configuration reference
+
+<ParamField path="credentials.access_token" type="string">
+  (Private App) The HubSpot Private App access token.
+</ParamField>
+
+<ParamField path="credentials.client_id" type="string">
+  (OAuth, Open Source) OAuth client ID.
+</ParamField>
+
+<ParamField path="credentials.client_secret" type="string">
+  (OAuth, Open Source) OAuth client secret.
+</ParamField>
+
+<ParamField path="credentials.refresh_token" type="string">
+  (OAuth, Open Source) OAuth refresh token.
+</ParamField>
+
+<ParamField path="start_date" type="string">
+  Data replication start date in `yyyy-mm-ddThh:mm:ssZ` format.
+</ParamField>
+
+<ParamField path="lookback_window" type="integer">
+  Number of minutes before the previous sync cursor to re-fetch data. Helps capture missing records.
+</ParamField>

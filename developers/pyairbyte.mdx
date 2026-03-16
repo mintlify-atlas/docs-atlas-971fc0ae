@@ -1,0 +1,62 @@
+---
+title: PyAirbyte
+description: Use PyAirbyte to read from any Airbyte source connector directly in Python, without deploying a server.
+---
+
+PyAirbyte brings the power of Airbyte to every Python and AI developer. Install it with a single `pip install` and start reading from hundreds of connectors without needing to run an Airbyte server.
+
+```bash
+pip install airbyte
+```
+
+## What you can do
+
+<CardGroup cols={2}>
+  <Card title="Overview" icon="circle-info" href="/developers/pyairbyte/overview">
+    Learn how PyAirbyte works, what connectors are supported, and when to use it.
+  </Card>
+  <Card title="Getting started" icon="rocket" href="/developers/pyairbyte/getting-started">
+    Install PyAirbyte and run your first data read in under five minutes.
+  </Card>
+  <Card title="API reference" icon="code" href="/developers/pyairbyte/api-reference">
+    Full reference for `get_source`, `Source.read`, cache classes, and all top-level functions.
+  </Card>
+  <Card title="PyAirbyte MCP server" icon="robot" href="/developers/mcp-servers/overview">
+    Manage Airbyte connectors through AI assistants using the MCP protocol.
+  </Card>
+</CardGroup>
+
+## Quickstart
+
+```python
+import airbyte as ab
+
+source = ab.get_source(
+    "source-faker",
+    config={"count": 5_000},
+    install_if_missing=True,
+)
+source.check()
+source.select_all_streams()
+result = source.read()
+
+for name, records in result.streams.items():
+    print(f"Stream {name}: {len(list(records))} records")
+```
+
+## Quickstart notebooks
+
+<CardGroup cols={2}>
+  <Card title="Basic demo" icon="play" href="https://github.com/airbytehq/quickstarts/blob/main/pyairbyte_notebooks/PyAirbyte_Basic_Features_Demo.ipynb">
+    Core PyAirbyte features in a Jupyter notebook.
+  </Card>
+  <Card title="AI and PyAirbyte" icon="sparkles" href="https://colab.research.google.com/github/airbytehq/quickstarts/blob/main/pyairbyte_notebooks/AI%20ChatBot%20-%201.0%20Launch%20Demo.ipynb">
+    Build an AI chatbot with PyAirbyte (Google Colab).
+  </Card>
+  <Card title="RAG with LangChain" icon="link" href="https://github.com/airbytehq/quickstarts/blob/main/pyairbyte_notebooks/PyAirbyte_Document_Creation_RAG_with_Langchain_Demo.ipynb">
+    Build a retrieval-augmented generation pipeline.
+  </Card>
+  <Card title="Postgres cache" icon="database" href="https://github.com/airbytehq/quickstarts/blob/main/pyairbyte_notebooks/PyAirbyte_Postgres_Custom_Cache_Demo.ipynb">
+    Persist data to a Postgres database.
+  </Card>
+</CardGroup>

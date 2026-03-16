@@ -1,0 +1,147 @@
+---
+title: Amazon S3 Destination
+description: Write data to Amazon S3 in CSV, JSON, Parquet, or Avro format using IAM user credentials, an IAM role, or an instance profile.
+---
+
+Airbyte's certified S3 destination connector writes data to Amazon S3 object storage. You can choose from CSV, JSONL, Parquet, and Avro output formats, and authenticate via IAM user credentials, an IAM role (STS Assume Role), or an EC2/EKS instance profile.
+
+## Prerequisites
+
+- An S3 bucket with write access
+- Authentication credentials:
+  - **IAM user**: AWS Access Key ID and Secret Access Key
+  - **IAM role**: Role ARN with a trust relationship allowing Airbyte to assume it
+  - **Instance profile**: No credentials needed if running on EC2/EKS with the appropriate instance profile
+
+## Setup guide
+
+<Steps>
+  <Step title="Create an IAM policy for the S3 bucket">
+    1. Open the [IAM console](https://console.aws.amazon.com/iam/home#home) and go to **Policies** > **Create Policy**.
+    2. Use the following JSON policy (substitute your bucket name):
+
+    ```json
+    {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Effect": "Allow",
+          "Action": [
+            "s3:PutObject",
+            "s3:GetObject",
+            "s3:DeleteObject",
+            "s3:PutObjectAcl",
+            "s3:ListBucket",
+            "s3:ListBucketMultipartUploads",
+            "s3:AbortMultipartUpload",
+            "s3:GetBucketLocation"
+          ],
+          "Resource": [
+            "arn:aws:s3:::YOUR_BUCKET_NAME/*",
+            "arn:aws:s3:::YOUR_BUCKET_NAME"
+          ]
+        }
+      ]
+    }
+    ```
+
+    3. Name the policy and click **Create policy**.
+  </Step>
+  <Step title="Attach credentials">
+    <Tabs>
+      <Tab title="IAM user">
+        Attach the policy to an IAM user and create an **Access Key** under **Security credentials**.
+      </Tab>
+      <Tab title="IAM role (most secure)">
+        1. Create a role with the **AWS account** trusted entity type.
+        2. Set the External ID to your Airbyte workspace ID.
+        3. Attach the policy to the role and note the **Role ARN**.
+
+        <Note>
+        IAM role authentication on Airbyte Cloud requires enablement by the Airbyte team.
+        </Note>
+      </Tab>
+      <Tab title="Instance profile">
+        Configure the EC2 or EKS instance running Airbyte with an instance profile that has the policy attached. Leave the access key and secret key fields empty.
+      </Tab>
+    </Tabs>
+  </Step>
+  <Step title="Set up the S3 destination in Airbyte">
+    1. In Airbyte, go to **Destinations** > **+ New destination** and select **S3**.
+    2. Enter a name for the destination.
+    3. Enter the **S3 Bucket Name**, **S3 Bucket Path**, and **S3 Bucket Region**.
+    4. Enter your authentication credentials (Access Key ID + Secret, Role ARN, or leave blank for instance profile).
+    5. Select the **Output Format** and configure format-specific options.
+    6. Click **Set up destination**.
+  </Step>
+</Steps>
+
+## Supported sync modes
+
+| Mode | Supported |
+|------|-----------|
+| Full Refresh - Overwrite | Yes |
+| Full Refresh - Append | Yes |
+| Incremental - Append | Yes |
+| Incremental - Append + Deduped | Yes |
+
+## Output formats
+
+<Tabs>
+  <Tab title="CSV">
+    Human-readable comma-separated values. Options:
+    - **Compression**: None, GZip, or BZIP2
+    - **Flattening**: whether nested objects are flattened into columns
+  </Tab>
+  <Tab title="JSONL">
+    Newline-delimited JSON, one record per line. Options:
+    - **Compression**: None, GZip, or BZIP2
+  </Tab>
+  <Tab title="Parquet">
+    Column-oriented binary format optimized for analytics. Options:
+    - **Compression**: None, Snappy, GZip, LZO, Brotli, LZ4, or ZSTD
+    - **Block size**, **Page size**, **Dictionary page size**, **Dictionary encoding**
+  </Tab>
+  <Tab title="Avro">
+    Row-oriented binary format with schema support. Options:
+    - **Compression**: None, Deflate, Bzip2, XZ, Zstandard, or Snappy
+  </Tab>
+</Tabs>
+
+## Output file structure
+
+Files are written to `s3://{bucket}/{bucket_path}/{namespace}/{stream_name}/` with names following the pattern `{timestamp}_{part_number}.{format}`.
+
+## Namespace support
+
+This destination supports [namespaces](/using-airbyte/namespaces). The namespace maps to a path prefix within the bucket path.
+
+## Configuration reference
+
+<ParamField path="s3_bucket_name" type="string" required>
+  The name of the S3 bucket.
+</ParamField>
+
+<ParamField path="s3_bucket_path" type="string" required>
+  The path prefix within the bucket where data is stored.
+</ParamField>
+
+<ParamField path="s3_bucket_region" type="string" required>
+  The AWS region of the S3 bucket (e.g., `us-east-1`).
+</ParamField>
+
+<ParamField path="access_key_id" type="string">
+  AWS Access Key ID for IAM user authentication.
+</ParamField>
+
+<ParamField path="secret_access_key" type="string">
+  AWS Secret Access Key for IAM user authentication.
+</ParamField>
+
+<ParamField path="role_arn" type="string">
+  AWS Role ARN for IAM role (STS Assume Role) authentication.
+</ParamField>
+
+<ParamField path="format" type="object" required>
+  The output format configuration. Specify `format_type` (`CSV`, `JSONL`, `Parquet`, or `Avro`) and format-specific options.
+</ParamField>

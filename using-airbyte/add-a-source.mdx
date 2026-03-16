@@ -1,0 +1,100 @@
+---
+title: Add and manage sources
+description: Connect to a database, API, or other system to start syncing data with Airbyte.
+---
+
+A source is the database, API, or other system from which you sync data. Adding a source connector is the first step when you want to start moving data with Airbyte.
+
+## Add a source connector
+
+<Steps>
+  <Step title="Open the Sources page">
+    In the left navigation, click **Sources**.
+  </Step>
+  <Step title="Create a new source">
+    Click **New Source**.
+  </Step>
+  <Step title="Find your connector">
+    Search for or browse the connector you want to add.
+
+    <Tip>
+    Not sure which source to start with? Click the **Marketplace** tab, then click **Sample Data**. Sample Data is a popular test source that generates random data so you can explore Airbyte without connecting a real system.
+    </Tip>
+  </Step>
+  <Step title="Configure the connector">
+    Every connector has different options, but you typically provide authentication information (such as a username and password or API key) and configuration details like a start date or search query.
+
+    <Tabs>
+      <Tab title="Airbyte Cloud (AI-assisted setup)">
+        If you use Airbyte Cloud, you can set up connectors with the Connector Setup Assistant. The AI asks you questions, provides context, and guides you through each field. See [Set up connectors with AI](#set-up-connectors-with-ai) for details.
+      </Tab>
+      <Tab title="Self-managed or manual setup">
+        If you use a self-managed version of Airbyte, or if the AI doesn't yet support your connector, you'll see a setup form alongside connector documentation. Fill out the form and click **Set up source**.
+
+        Airbyte tests the connection to confirm it works. Once the test completes, Airbyte takes you to the New Connection page where you can configure a destination.
+      </Tab>
+    </Tabs>
+  </Step>
+</Steps>
+
+## Modify a source connector
+
+<Steps>
+  <Step title="Open the Sources page">
+    In the left navigation, click **Sources**.
+  </Step>
+  <Step title="Select the source">
+    Find and click the source connector you want to modify.
+  </Step>
+  <Step title="Update the configuration">
+    Edit the fields in the form on the left side of your screen. Use the documentation panel on the right for reference.
+  </Step>
+  <Step title="Save your changes">
+    Click **Test and save**. Airbyte tests the source to confirm the connection still works.
+  </Step>
+</Steps>
+
+## Delete a source connector
+
+<Warning>
+Deleting a source connector also deletes any connections that rely on it. Data already in your destination is not affected. However, if you recreate the connection later, a full re-sync is required.
+</Warning>
+
+<Steps>
+  <Step title="Open the Sources page">
+    In the left navigation, click **Sources**.
+  </Step>
+  <Step title="Select the source">
+    Find and click the source connector you want to delete.
+  </Step>
+  <Step title="Delete the source">
+    Click **Delete this source**, type the connector name in the confirmation dialog, then click **Delete**.
+  </Step>
+</Steps>
+
+## Set up connectors with AI
+
+On Airbyte Cloud, the Connector Setup Assistant uses AI to walk you through connector configuration. Instead of filling out a form, you have a guided conversation where the AI asks for the information it needs and explains what each field does.
+
+This feature is in beta and may not be available for every connector.
+
+## Reuse source connectors
+
+Connectors are reusable. In most cases, you only need to set up a source connector once and can use it in as many connections as you need.
+
+In some cases you may need multiple instances of the same connector — for example, if you're pulling data from multiple accounts that each require separate authentication.
+
+## If you don't see the connector you need
+
+If Airbyte doesn't have the connector you need, you can [build your own](/build-connectors/overview). The Connector Builder is a no-code/low-code development environment built into Airbyte's UI that makes custom connector creation straightforward.
+
+## Other ways to manage sources
+
+You can also manage source connectors programmatically:
+
+- [Airbyte API](https://reference.airbyte.com/reference/createsource)
+- [Terraform](/developers/terraform-provider)
+
+<Tip>
+When using the API or Terraform, you can speed up configuration by filling in values through the UI first, then clicking **Copy JSON**. This copies your configuration as a JSON string you can paste directly into your code.
+</Tip>

@@ -1,0 +1,245 @@
+---
+title: PostgreSQL Source
+description: Replicate data from PostgreSQL databases using CDC (logical replication), xmin, or standard cursor-based incremental sync.
+---
+
+Airbyte's certified PostgreSQL source connector lets you replicate data from tables, views, and materialized views. It supports Change Data Capture (CDC) via logical replication for capturing deletes and changes at scale, as well as the xmin system column for cursor-less incremental sync.
+
+<Info>
+The minimum required Airbyte platform version for this connector is **v0.58.0**.
+</Info>
+
+## Prerequisites
+
+- A running PostgreSQL instance (version 9.5 or later)
+- A database user with `SELECT` access on the schemas and tables you want to replicate
+- For CDC: additional `REPLICATION` permission and a replication slot
+- For Airbyte Cloud: network access from Airbyte IP addresses to your database
+
+## Quick start
+
+The minimum required steps to connect a PostgreSQL source:
+
+<Steps>
+  <Step title="Create a dedicated read-only Postgres user">
+    Run the following SQL commands to create a user and grant it read access:
+
+    ```sql
+    CREATE USER airbyte_user PASSWORD 'your_password_here';
+
+    -- Repeat for each schema you want to replicate
+    GRANT USAGE ON SCHEMA <schema_name> TO airbyte_user;
+    GRANT SELECT ON ALL TABLES IN SCHEMA <schema_name> TO airbyte_user;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA <schema_name> GRANT SELECT ON TABLES TO airbyte_user;
+    ```
+  </Step>
+  <Step title="Create a new Postgres source in Airbyte">
+    1. In Airbyte, go to **Sources** and click **+ New source**.
+    2. Select **Postgres** from the list.
+    3. Enter your database hostname, port, and database name.
+    4. Optionally list the schemas you want to sync (defaults to `public`).
+    5. Enter the username and password you created above.
+    6. Select an SSL mode (recommended: `require` or `verify-ca`).
+    7. For **Replication Method**, select **Standard (xmin)** for most databases. Use CDC only if you need deletes or have a very large database (>500 GB).
+    8. Click **Set up source**.
+  </Step>
+  <Step title="(Airbyte Cloud only) Allow inbound traffic">
+    Add Airbyte's IP addresses to your database's allowlist. 
+  </Step>
+</Steps>
+
+## Advanced: Change Data Capture (CDC)
+
+Use CDC when you need to capture deletes, have a very large database (500 GB or more), or your tables lack a good cursor field for incremental sync.
+
+CDC uses [PostgreSQL logical replication](https://www.postgresql.org/docs/current/logical-replication.html) of the write-ahead log (WAL) with the `pgoutput` plugin.
+
+<Steps>
+  <Step title="Grant REPLICATION permission">
+    ```sql
+    ALTER USER airbyte_user REPLICATION;
+    ```
+  </Step>
+  <Step title="Enable logical replication on your database">
+    <Tabs>
+      <Tab title="Bare metal / VM / Docker">
+        Add the following to your `postgresql.conf`:
+
+        | Parameter | Value |
+        |-----------|-------|
+        | `wal_level` | `logical` |
+        | `max_wal_senders` | `1` (minimum) |
+        | `max_replication_slots` | `1` (if Airbyte is the only subscriber) |
+      </Tab>
+      <Tab title="AWS RDS / Aurora">
+        1. Go to your DB cluster's **Configuration** tab.
+        2. Find or create a cluster parameter group.
+        3. Set `rds.logical_replication` to `1`.
+        4. Restart the instance.
+
+        <Note>
+        AWS Aurora implements a CDC caching layer incompatible with Airbyte. Disable it by setting `rds.logical_wal_cache` to `0` in the Aurora parameter group.
+        </Note>
+      </Tab>
+      <Tab title="Azure Database for PostgreSQL">
+        Run the following Azure CLI commands:
+
+        ```bash
+        az postgres server configuration set \
+          --resource-group <group> \
+          --server-name <server> \
+          --name azure.replication_support \
+          --value logical
+
+        az postgres server restart \
+          --resource-group <group> \
+          --name <server>
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+  <Step title="Create a replication slot">
+    Airbyte requires a dedicated replication slot using the `pgoutput` plugin:
+
+    ```sql
+    SELECT pg_create_logical_replication_slot('airbyte_slot', 'pgoutput');
+    ```
+
+    Note the slot name — you'll enter it in the Airbyte UI.
+  </Step>
+  <Step title="Create a publication for your tables">
+    ```sql
+    -- Set replica identity for each table
+    ALTER TABLE tbl1 REPLICA IDENTITY DEFAULT;
+
+    -- Create the publication
+    CREATE PUBLICATION airbyte_publication FOR TABLE tbl1, tbl2, tbl3;
+    ```
+  </Step>
+  <Step title="Enable CDC in the Airbyte UI">
+    In your Postgres source configuration, change the **Update method** to **Read Changes using Change Data Capture (CDC)** and enter the replication slot and publication names.
+  </Step>
+</Steps>
+
+## Replication methods
+
+<Accordion title="CDC (Change Data Capture)">
+  CDC uses logical replication of the WAL to capture inserts, updates, and deletes. Best when:
+  - You need a record of deletions.
+  - Your database is 500 GB or larger.
+  - Your tables have primary keys but no suitable cursor column like `updated_at`.
+
+  Starting with connector version 3.6.21, CDC can run against a Postgres read replica (requires Postgres 16.1+).
+</Accordion>
+
+<Accordion title="Xmin (cursor-less incremental)">
+  Xmin uses the PostgreSQL `xmin` system column to track new and updated rows without requiring a cursor field. Best when:
+  - There's no well-defined cursor candidate in your tables.
+  - You want to replace a previously configured full-refresh sync.
+  - Your database doesn't have heavy write patterns that would cause transaction ID wraparound.
+
+  Note: non-materialized views are not supported by xmin replication.
+</Accordion>
+
+<Accordion title="Standard (cursor-based)">
+  Standard incremental sync uses a user-defined cursor field (for example, `updated_at`) to track changes. Use this when CDC and xmin are not suitable for your setup.
+</Accordion>
+
+## Connecting with SSL or SSH
+
+<Accordion title="SSL modes">
+  Airbyte Cloud always uses SSL. The following modes are available:
+
+  | Mode | Description |
+  |------|-------------|
+  | `disable` | No encryption (not allowed on Airbyte Cloud) |
+  | `allow` | Encrypt only if required by the server |
+  | `prefer` | Encrypt if supported by the server |
+  | `require` | Always encrypt; no certificate validation |
+  | `verify-ca` | Always encrypt; verify server certificate |
+  | `verify-full` | Always encrypt; verify server identity |
+</Accordion>
+
+<Accordion title="SSH tunneling">
+  To connect through a bastion host:
+
+  1. Select **SSH Key Authentication** or **Password Authentication** from the SSH tunnel dropdown.
+  2. Enter the **SSH Tunnel Jump Server Host** (hostname or IP of the bastion).
+  3. Enter the **SSH Connection Port** (default: 22).
+  4. Enter the **SSH Login Username** (OS username, not Postgres username).
+  5. Provide either the SSH private key or password.
+
+  To generate an RSA key:
+  ```bash
+  ssh-keygen -t rsa -m PEM -f myuser_rsa
+  ```
+  Add the public key to your bastion's `authorized_keys` file and paste the private key into Airbyte.
+</Accordion>
+
+## Supported sync modes
+
+| Mode | Supported |
+|------|-----------|
+| Full Refresh - Overwrite | Yes |
+| Full Refresh - Append | Yes |
+| Incremental - Append | Yes |
+| Incremental - Append + Deduped | Yes |
+
+## Data type mapping
+
+| PostgreSQL type | Airbyte type | Notes |
+|-----------------|-------------|-------|
+| `bigint`, `integer`, `smallint` | number | |
+| `boolean` | boolean | |
+| `character`, `varchar`, `text` | string | |
+| `date` | string | ISO 8601 date |
+| `double precision`, `float` | number | `Infinity`, `-Infinity`, `NaN` → `null` |
+| `json`, `jsonb` | string | |
+| `numeric`, `decimal` | number | |
+| `timestamp` | string | ISO 8601 datetime |
+| `timestamptz` | string | ISO 8601 datetime with timezone |
+| `uuid` | string | |
+| `array` | array | |
+| `enum` | string | |
+
+## Configuration reference
+
+<ParamField path="host" type="string" required>
+  The hostname or IP address of your PostgreSQL server.
+</ParamField>
+
+<ParamField path="port" type="integer" required>
+  The port your PostgreSQL server listens on. Default: `5432`.
+</ParamField>
+
+<ParamField path="database" type="string" required>
+  The name of the database to replicate from.
+</ParamField>
+
+<ParamField path="schemas" type="array">
+  List of schemas to sync. Defaults to `["public"]`.
+</ParamField>
+
+<ParamField path="username" type="string" required>
+  The username to authenticate with.
+</ParamField>
+
+<ParamField path="password" type="string" required>
+  The password to authenticate with.
+</ParamField>
+
+<ParamField path="ssl_mode" type="string">
+  The SSL connection mode. One of `disable`, `allow`, `prefer`, `require`, `verify-ca`, or `verify-full`.
+</ParamField>
+
+<ParamField path="replication_method" type="object" required>
+  The method used to replicate data. Options: `Standard` (cursor), `Xmin`, or `CDC`.
+</ParamField>
+
+<ParamField path="replication_method.replication_slot" type="string">
+  (CDC only) The name of the Postgres logical replication slot.
+</ParamField>
+
+<ParamField path="replication_method.publication" type="string">
+  (CDC only) The name of the Postgres publication.
+</ParamField>

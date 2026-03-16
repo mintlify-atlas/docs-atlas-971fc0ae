@@ -1,0 +1,97 @@
+---
+title: PostgreSQL Destination
+description: Load data into a PostgreSQL database. Best for small data volumes or testing; consider a data warehouse for production workloads over 10 GB.
+---
+
+Airbyte's PostgreSQL destination connector loads data into a PostgreSQL database. It uses the **Direct Load** architecture (since version 3.0.0), writing directly to final tables without intermediate raw tables.
+
+<Warning>
+PostgreSQL is not a data warehouse. Only use it as a destination for small data volumes (under 10 GB) or for testing. For production workloads at scale, use BigQuery, Snowflake, or Redshift instead.
+</Warning>
+
+## Prerequisites
+
+- A PostgreSQL server version 9.5 or above
+- A database user with `CREATE` and `TEMPORARY` permissions on the target database
+- For Airbyte Cloud: SSL or TLS encryption (required; enabled by default)
+
+## Setup guide
+
+<Steps>
+  <Step title="Create a Postgres user for Airbyte">
+    ```sql
+    CREATE USER airbyte_user WITH PASSWORD 'your_secure_password';
+    GRANT CREATE, TEMPORARY ON DATABASE <your_database> TO airbyte_user;
+    ```
+  </Step>
+  <Step title="Set up the PostgreSQL destination in Airbyte">
+    <Tabs>
+      <Tab title="Airbyte Cloud">
+        1. In Airbyte, go to **Destinations** > **+ New destination** and select **Postgres**.
+        2. Enter a name for the destination.
+        3. Enter your **Host**, **Port** (default: 5432), **DB Name**, **Username**, and **Password**.
+        4. Optionally set the **Default Schema Name** (defaults to `public`).
+        5. Click **Set up destination**.
+      </Tab>
+      <Tab title="Airbyte Open Source">
+        1. In Airbyte, go to **Destinations** > **+ New destination** and select **Postgres**.
+        2. Enter your connection details: host, port, database name, username, password, and schema.
+        3. Optionally add **JDBC URL Params** for additional connection parameters.
+        4. Click **Set up destination**.
+      </Tab>
+    </Tabs>
+  </Step>
+</Steps>
+
+## Supported sync modes
+
+| Mode | Supported |
+|------|-----------|
+| Full Refresh - Overwrite | Yes |
+| Full Refresh - Append | Yes |
+| Full Refresh - Overwrite + Deduped | Yes |
+| Incremental - Append | Yes |
+| Incremental - Append + Deduped | Yes |
+
+## Naming conventions
+
+Airbyte creates tables and columns using quoted PostgreSQL identifiers, preserving case sensitivity. Special characters in names are replaced with underscores.
+
+PostgreSQL identifier rules:
+- Must begin with a letter or underscore
+- Can contain letters, underscores, digits, and dollar signs
+- Maximum length: 63 bytes (NAMEDATALEN - 1)
+
+## Configuration reference
+
+<ParamField path="host" type="string" required>
+  The hostname of the PostgreSQL server.
+</ParamField>
+
+<ParamField path="port" type="integer" required>
+  The port the server listens on. Default: `5432`.
+</ParamField>
+
+<ParamField path="database" type="string" required>
+  The target database name.
+</ParamField>
+
+<ParamField path="schema" type="string">
+  The target schema name. Default: `public`.
+</ParamField>
+
+<ParamField path="username" type="string" required>
+  The username to authenticate with.
+</ParamField>
+
+<ParamField path="password" type="string" required>
+  The password to authenticate with.
+</ParamField>
+
+<ParamField path="jdbc_url_params" type="string">
+  Additional JDBC URL parameters (optional).
+</ParamField>
+
+<ParamField path="ssl" type="boolean">
+  Whether to use SSL. Required on Airbyte Cloud.
+</ParamField>

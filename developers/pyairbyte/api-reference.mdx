@@ -1,0 +1,464 @@
+---
+title: PyAirbyte API reference
+description: Reference documentation for the PyAirbyte Python library, including get_source, Source, ReadResult, caches, and destinations.
+---
+
+This page covers the key classes and functions in the `airbyte` package. For the full auto-generated API reference, see the [PyAirbyte docs site](https://airbytehq.github.io/PyAirbyte/).
+
+## Importing
+
+Most PyAirbyte examples use the `ab` alias:
+
+```python
+import airbyte as ab
+```
+
+You can also import specific classes from submodules:
+
+```python
+from airbyte.sources import Source
+from airbyte.caches import DuckDBCache, PostgresCache
+from airbyte.destinations import Destination
+```
+
+## Top-level functions
+
+### `get_source`
+
+Creates and returns a `Source` connector object.
+
+```python
+ab.get_source(
+    name,
+    config=None,
+    *,
+    streams=None,
+    version=None,
+    install_if_missing=True,
+    use_python=None,
+    pip_url=None,
+    docker_image=None,
+    local_executable=None,
+    source_manifest=None,
+    install_root=None,
+    no_executor=False,
+)
+```
+
+<ParamField path="name" type="string" required>
+  Connector name, e.g. `"source-github"` or `"source-stripe"`.
+</ParamField>
+<ParamField path="config" type="dict">
+  Connector configuration as a Python dictionary. Can be set later using `source.set_config()`.
+</ParamField>
+<ParamField path="streams" type="string | list[string]">
+  Stream names to select. Pass `"*"` for all streams, or a list of stream names.
+</ParamField>
+<ParamField path="version" type="string">
+  Connector version to use. Defaults to the latest available. Use `"latest"` to force an upgrade.
+</ParamField>
+<ParamField path="install_if_missing" type="boolean">
+  Install the connector if it is not already installed. Defaults to `True`.
+</ParamField>
+<ParamField path="use_python" type="boolean | Path | string">
+  Python interpreter to use. `True` uses the current interpreter. A string like `"3.11"` installs that version via `uv`.
+</ParamField>
+<ParamField path="docker_image" type="boolean | string">
+  Run the connector using Docker. Pass `True` for the default image or a custom image name string.
+</ParamField>
+<ParamField path="source_manifest" type="boolean | dict | Path | string">
+  Run the connector from a declarative YAML manifest. Pass `True` to auto-download, a `dict` for an inline manifest, a `Path` for a local file, or a URL string.
+</ParamField>
+<ParamField path="no_executor" type="boolean">
+  When `True`, fetch connector specs from the registry without installing locally. Useful for validating configs before deploying to Cloud.
+</ParamField>
+
+**Example**
+
+```python
+source = ab.get_source(
+    "source-stripe",
+    config={
+        "account_id": "acct_123",
+        "client_secret": "sk_live_...",
+        "start_date": "2024-01-01T00:00:00Z",
+    },
+    streams=["customers", "charges", "invoices"],
+    install_if_missing=True,
+)
+```
+
+---
+
+### `get_destination`
+
+Creates and returns a `Destination` connector object. Accepts the same execution parameters as `get_source`.
+
+```python
+destination = ab.get_destination(
+    "destination-duckdb",
+    config={"destination_path": "/tmp/my.duckdb"},
+)
+```
+
+---
+
+### `get_secret`
+
+Retrieves a secret value from available secret sources.
+
+```python
+ab.get_secret(
+    secret_name,
+    /,
+    *,
+    sources=None,
+    default=None,
+    allow_prompt=True,
+)
+```
+
+<ParamField path="secret_name" type="string" required>
+  Name of the secret to retrieve (e.g. an environment variable name).
+</ParamField>
+<ParamField path="sources" type="list[SecretSourceEnum]">
+  Ordered list of sources to search. Defaults to all available sources.
+</ParamField>
+<ParamField path="default" type="string">
+  Default value to return if the secret is not found. If not set, raises `PyAirbyteSecretNotFoundError`.
+</ParamField>
+<ParamField path="allow_prompt" type="boolean">
+  Whether to prompt the user interactively if the secret is not found. Defaults to `True`.
+</ParamField>
+
+**Secret sources (`SecretSourceEnum`)**
+
+| Value | Description |
+|-------|-------------|
+| `SecretSourceEnum.ENV` | System environment variables |
+| `SecretSourceEnum.DOTENV` | `.env` file in the working directory |
+| `SecretSourceEnum.GOOGLE_COLAB` | Google Colab secret storage |
+| `SecretSourceEnum.GOOGLE_GSM` | Google Secret Manager |
+| `SecretSourceEnum.PROMPT` | Interactive terminal prompt |
+
+---
+
+### `get_available_connectors`
+
+Returns a sorted list of all available connector names.
+
+```python
+connectors = ab.get_available_connectors()
+# ['source-airtable', 'source-amplitude', ..., 'source-zendesk-support']
+```
+
+---
+
+### `get_default_cache`
+
+Returns a DuckDB cache using the default path (`.cache/` in the current directory).
+
+```python
+cache = ab.get_default_cache()
+```
+
+---
+
+## `Source` class
+
+Represents a source connector. Created via `ab.get_source()`.
+
+### Methods
+
+#### `source.check()`
+
+Validates the connector configuration by running the connector's `check` command.
+
+```python
+source.check()  # raises on failure
+```
+
+#### `source.select_all_streams()`
+
+Selects all available streams for reading.
+
+```python
+source.select_all_streams()
+```
+
+#### `source.select_streams(streams)`
+
+Selects specific streams for reading.
+
+<ParamField path="streams" type="string | list[string]" required>
+  Stream names to select. Pass `"*"` to select all streams.
+</ParamField>
+
+```python
+source.select_streams(["customers", "orders"])
+```
+
+#### `source.get_available_streams()`
+
+Returns a list of all stream names available from the connector.
+
+```python
+streams = source.get_available_streams()
+print(streams)  # ['commits', 'issues', 'pull_requests', ...]
+```
+
+#### `source.read(cache, *, streams, write_strategy, force_full_refresh, skip_validation)`
+
+Reads data from the connector and writes it to a cache. Returns a `ReadResult`.
+
+<ParamField path="cache" type="CacheBase">
+  Cache to write data to. Defaults to a local DuckDB cache if not specified.
+</ParamField>
+<ParamField path="streams" type="string | list[string]">
+  Override the selected streams for this read.
+</ParamField>
+<ParamField path="write_strategy" type="string | WriteStrategy">
+  How to write records. Options: `"auto"` (default), `"append"`, `"merge"`, `"replace"`.
+</ParamField>
+<ParamField path="force_full_refresh" type="boolean">
+  Ignore any saved state and perform a full sync. Defaults to `False`.
+</ParamField>
+<ParamField path="skip_validation" type="boolean">
+  Skip JSON Schema validation of the configuration before running. Defaults to `False`.
+</ParamField>
+
+```python
+result = source.read(
+    cache=my_cache,
+    force_full_refresh=False,
+    write_strategy="merge",
+)
+```
+
+#### `source.get_records(stream, *, limit, normalize_field_names)`
+
+Reads records from a single stream without writing to cache. Returns a `LazyDataset`.
+
+```python
+records = source.get_records("users", limit=100)
+for record in records:
+    print(record)
+```
+
+#### `source.get_documents(stream, title_property, content_properties, metadata_properties)`
+
+Reads a stream and returns records as LLM-compatible documents.
+
+```python
+docs = source.get_documents(
+    stream="issues",
+    title_property="title",
+    content_properties=["body"],
+    metadata_properties=["number", "state"],
+)
+```
+
+#### `source.set_config(config, *, validate)`
+
+Sets or replaces the connector configuration.
+
+```python
+source.set_config({"count": 5000}, validate=True)
+```
+
+#### `source.set_cursor_key(stream_name, cursor_key)` / `source.set_cursor_keys(**kwargs)`
+
+Overrides the cursor field for incremental syncs on one or more streams.
+
+```python
+source.set_cursor_keys(
+    orders="updated_at",
+    customers="modified_at",
+)
+```
+
+#### `source.set_primary_key(stream_name, primary_key)` / `source.set_primary_keys(**kwargs)`
+
+Overrides the primary key for one or more streams.
+
+```python
+source.set_primary_keys(
+    orders="order_id",
+    line_items=["order_id", "item_id"],  # composite key
+)
+```
+
+#### `source.print_samples(streams, *, limit)`
+
+Prints sample records from the given streams to stdout — useful for exploring connector output.
+
+```python
+source.print_samples(streams=["users"], limit=3)
+```
+
+### Properties
+
+| Property | Type | Description |
+|---|---|---|
+| `source.config_spec` | `dict` | JSON Schema spec for the connector's configuration. |
+| `source.discovered_catalog` | `AirbyteCatalog` | Raw catalog returned by the connector's `discover` command. |
+| `source.configured_catalog` | `ConfiguredAirbyteCatalog` | Catalog filtered to the selected streams. |
+| `source.docs_url` | `str` | URL to the connector's documentation. |
+
+---
+
+## `ReadResult` class
+
+Returned by `source.read()`. Provides access to the cached data.
+
+```python
+result = source.read()
+
+# Access a stream dataset
+dataset = result["users"]
+
+# Total records read
+print(result.processed_records)
+
+# Iterate over stream names
+for name in result.streams:
+    print(name)
+
+# Get the underlying SQL engine
+engine = result.get_sql_engine()
+```
+
+### Properties
+
+| Property | Type | Description |
+|---|---|---|
+| `result.processed_records` | `int` | Total records read across all streams. |
+| `result.streams` | `Mapping[str, CachedDataset]` | Map of stream name to dataset. |
+| `result.cache` | `CacheBase` | The cache the data was written to. |
+
+---
+
+## `CachedDataset` class
+
+Represents a single stream's data in a SQL cache.
+
+```python
+dataset = result["users"]
+
+# Convert to Pandas
+df = dataset.to_pandas()
+
+# Convert to PyArrow
+arrow = dataset.to_arrow(max_chunk_size=50_000)
+
+# Get the SQLAlchemy Table object
+table = dataset.to_sql_table()
+
+# Iterate over records
+for record in dataset.records:
+    print(record)
+```
+
+---
+
+## Cache classes
+
+All cache classes are importable from `airbyte.caches`.
+
+| Class | Description |
+|-------|-------------|
+| `DuckDBCache` | Local DuckDB file. Default when no cache is specified. |
+| `PostgresCache` | PostgreSQL database. |
+| `SnowflakeCache` | Snowflake data warehouse. |
+| `BigQueryCache` | Google BigQuery. |
+| `MotherDuckCache` | MotherDuck (cloud DuckDB). Inherits from `DuckDBCache`. |
+
+### `DuckDBCache`
+
+```python
+from airbyte.caches import DuckDBCache
+
+cache = DuckDBCache(
+    db_path="/path/to/my_cache.duckdb",
+    schema_name="main",
+)
+```
+
+### `PostgresCache`
+
+```python
+from airbyte.caches import PostgresCache
+
+cache = PostgresCache(
+    host="localhost",
+    port=5432,
+    database="my_db",
+    username="postgres",
+    password="secret",
+    schema_name="public",
+)
+```
+
+### `SnowflakeCache`
+
+```python
+from airbyte.caches import SnowflakeCache
+
+cache = SnowflakeCache(
+    account="myaccount.us-east-1",
+    username="airbyte",
+    password="secret",
+    database="AIRBYTE",
+    schema_name="RAW",
+    warehouse="COMPUTE_WH",
+    role="AIRBYTE_ROLE",
+)
+```
+
+### `BigQueryCache`
+
+```python
+from airbyte.caches import BigQueryCache
+
+cache = BigQueryCache(
+    project_name="my-project",
+    dataset_name="airbyte_raw",
+    credentials_path="/path/to/service-account.json",
+)
+```
+
+<Note>
+`BigQueryCache` does not support `to_arrow()`. Use `to_pandas()` or `to_sql_table()` instead.
+</Note>
+
+---
+
+## `Destination` class
+
+Represents a destination connector. Created via `ab.get_destination()`.
+
+### `destination.write(source_data, *, streams, cache, write_strategy, force_full_refresh)`
+
+Writes data from a source or `ReadResult` to the destination.
+
+<ParamField path="source_data" type="Source | ReadResult" required>
+  The data to write. Can be a live `Source` object or a previously obtained `ReadResult`.
+</ParamField>
+<ParamField path="streams" type="list[string] | '*'">
+  Streams to write. Defaults to all selected streams.
+</ParamField>
+<ParamField path="write_strategy" type="WriteStrategy">
+  Write mode. Defaults to `WriteStrategy.AUTO`.
+</ParamField>
+<ParamField path="force_full_refresh" type="boolean">
+  Ignore saved state and re-sync all data. Defaults to `False`.
+</ParamField>
+
+```python
+destination = ab.get_destination(
+    "destination-snowflake",
+    config={...},
+)
+write_result = destination.write(source)
+print(f"Wrote {write_result.processed_records} records")
+```

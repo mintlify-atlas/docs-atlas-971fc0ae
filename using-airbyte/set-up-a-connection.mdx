@@ -1,0 +1,95 @@
+---
+title: Set up a connection
+description: Create an automated data pipeline that syncs data from a source to a destination.
+---
+
+A **connection** is the relationship between a source connector and a destination connector. When you create a connection, you create an automated data pipeline that syncs data from the source to the destination.
+
+Connections define:
+
+- What data Airbyte should replicate
+- How Airbyte should read and write data
+- When Airbyte should run a sync
+- Where Airbyte should write replicated data
+- How Airbyte should handle schema drift
+
+Each time a connection runs, the execution is called a **sync**. You can run syncs on an automated schedule or trigger them manually.
+
+## Streams
+
+A **stream** is a group of related records within a connection. Depending on the destination, a stream might correspond to a table, a file, multiple files, or a blob. Airbyte uses the term "stream" to generalize data flow across destinations of all types.
+
+Examples of streams:
+
+- A table in a relational database
+- A resource or API endpoint in a REST API
+- Records from a directory containing files in a filesystem
+
+You can configure each stream individually when you need granular control over specific parts of your data.
+
+## Create a connection
+
+<Steps>
+  <Step title="Add a source">
+    Before creating a connection, you need at least one source connector. See [Add a source](/using-airbyte/add-a-source) if you haven't set one up yet.
+  </Step>
+  <Step title="Add a destination">
+    You also need at least one destination connector. See [Add a destination](/using-airbyte/add-a-destination) if you haven't set one up yet.
+  </Step>
+  <Step title="Open the Connections page">
+    In the left navigation, click **Connections**, then click **New Connection**.
+  </Step>
+  <Step title="Select your source">
+    Choose an existing source connector or create a new one.
+  </Step>
+  <Step title="Select your destination">
+    Choose an existing destination connector or create a new one.
+  </Step>
+  <Step title="Configure the connection">
+    Set up the key parameters for your connection:
+
+    | Setting | Description |
+    | --- | --- |
+    | Stream and field selection | Which data to replicate from the source |
+    | [Sync mode](/using-airbyte/sync-modes) | How each stream should be read and written |
+    | [Sync schedule](/using-airbyte/sync-schedules) | When syncs should run |
+    | [Destination namespace](/using-airbyte/namespaces) | Where data is written in the destination |
+    | [Schema propagation](/using-airbyte/schema-change-management) | How to handle schema changes in the source |
+  </Step>
+  <Step title="Save and sync">
+    Click **Set up connection**. Airbyte runs an initial sync immediately.
+  </Step>
+</Steps>
+
+## Monitor a connection
+
+After your connection is set up, you can monitor it from the **Connections** page. Click on a connection to view:
+
+- Sync history and status for each run
+- The streams being replicated and their sync modes
+- Schema and configuration settings
+
+## Modify a connection
+
+You can update connection settings at any time from the connection's **Settings** tab. Changes take effect on the next sync.
+
+## Manually trigger a sync
+
+To run a sync outside of the regular schedule, open the connection and click **Sync Now**.
+
+## Related concepts
+
+<CardGroup cols={2}>
+  <Card title="Sync modes" icon="arrows-rotate" href="/using-airbyte/sync-modes">
+    Control how Airbyte reads from sources and writes to destinations.
+  </Card>
+  <Card title="Sync schedules" icon="clock" href="/using-airbyte/sync-schedules">
+    Configure when your syncs run — scheduled intervals, cron, or manual.
+  </Card>
+  <Card title="Schema change management" icon="code-branch" href="/using-airbyte/schema-change-management">
+    Define how Airbyte handles schema drift in your sources.
+  </Card>
+  <Card title="Namespaces" icon="folder" href="/using-airbyte/namespaces">
+    Control where replicated data is written in your destination.
+  </Card>
+</CardGroup>

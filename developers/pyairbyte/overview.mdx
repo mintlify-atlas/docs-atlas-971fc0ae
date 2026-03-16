@@ -1,0 +1,225 @@
+---
+title: PyAirbyte overview
+description: Learn how PyAirbyte works, when to use it, and how it relates to Airbyte Cloud and self-managed deployments.
+---
+
+PyAirbyte is a Python library that lets you read data from any Airbyte source connector directly in your Python environment. You do not need a running Airbyte server.
+
+## How it works
+
+When you call `source.read()`, PyAirbyte:
+
+1. Downloads and installs the connector as a Python package (or Docker image, for Java-based connectors).
+2. Executes the connector locally to extract data.
+3. Writes records to a local cache (DuckDB by default) or a cache you specify.
+4. Returns a `ReadResult` object that lets you query the data using Pandas, PyArrow, or SQL.
+
+Because each connector runs as an isolated subprocess, PyAirbyte supports all connectors in the Airbyte catalog without any additional infrastructure.
+
+## When to use PyAirbyte
+
+PyAirbyte is a good fit when you want to:
+
+- Extract data from Airbyte connectors in a Python script, notebook, or ETL framework.
+- Build AI pipelines that ingest data from APIs, databases, or SaaS tools.
+- Prototype data integrations before deploying them to Airbyte Cloud or self-managed.
+- Use Airbyte connectors in environments where running a server is impractical (e.g., GitHub Actions, Google Colab, AWS Lambda).
+
+For production-scale, multi-tenant, or GUI-managed data pipelines, use [Airbyte Cloud](https://airbyte.com) or a self-managed deployment instead.
+
+## Supported connectors
+
+PyAirbyte supports all connectors in the Airbyte catalog. Connectors are installed automatically on first use. You can also pin a specific version:
+
+```python
+import airbyte as ab
+
+# Install and use the latest version
+source = ab.get_source("source-github", config={...}, install_if_missing=True)
+
+# Pin a specific version
+source = ab.get_source("source-github", config={...}, version="1.4.0")
+
+# List all available connectors
+print(ab.get_available_connectors())
+```
+
+## Caches
+
+By default, PyAirbyte writes data to a local DuckDB database. You can use any of the built-in SQL caches or write directly to a destination connector.
+
+### SQL caches
+
+SQL caches are Python-native and work without Docker. They are the recommended approach for loading data into SQL databases.
+
+<Tabs>
+  <Tab title="DuckDB (default)">
+    ```python
+    import airbyte as ab
+
+    # DuckDB is used automatically if no cache is specified
+    source = ab.get_source("source-faker", config={"count": 1000})
+    source.select_all_streams()
+    result = source.read()  # writes to ~/.cache/... by default
+
+    # Access as a Pandas DataFrame
+    df = result["users"].to_pandas()
+    ```
+  </Tab>
+  <Tab title="Postgres">
+    ```python
+    import airbyte as ab
+    from airbyte.caches import PostgresCache
+
+    cache = PostgresCache(
+        host="localhost",
+        port=5432,
+        database="airbyte",
+        username="postgres",
+        password="password",
+        schema_name="public",
+    )
+
+    source = ab.get_source("source-faker", config={"count": 1000})
+    source.select_all_streams()
+    result = source.read(cache=cache)
+    ```
+  </Tab>
+  <Tab title="Snowflake">
+    ```python
+    import airbyte as ab
+    from airbyte.caches import SnowflakeCache
+
+    cache = SnowflakeCache(
+        account="your_account",
+        username="your_user",
+        password="your_password",
+        database="AIRBYTE",
+        schema_name="PUBLIC",
+        warehouse="COMPUTE_WH",
+    )
+
+    source = ab.get_source("source-stripe", config={...})
+    source.select_all_streams()
+    result = source.read(cache=cache)
+    ```
+  </Tab>
+  <Tab title="BigQuery">
+    ```python
+    import airbyte as ab
+    from airbyte.caches import BigQueryCache
+
+    cache = BigQueryCache(
+        project_name="my-gcp-project",
+        dataset_name="airbyte_data",
+        credentials_path="/path/to/service-account.json",
+    )
+
+    source = ab.get_source("source-github", config={...})
+    source.select_all_streams()
+    result = source.read(cache=cache)
+    ```
+  </Tab>
+</Tabs>
+
+### Destination connectors
+
+You can also write directly to any Airbyte destination connector using `get_destination`. This approach requires Docker for Java-based destinations, so SQL caches are preferred when available.
+
+```python
+import airbyte as ab
+
+source = ab.get_source("source-faker", config={"count": 1000})
+source.select_all_streams()
+
+destination = ab.get_destination(
+    "destination-duckdb",
+    config={"destination_path": "/tmp/my_db.duckdb"},
+)
+destination.write(source)
+```
+
+## Working with results
+
+After calling `source.read()`, you get a `ReadResult` object. Access individual streams as `CachedDataset` objects:
+
+```python
+import airbyte as ab
+
+source = ab.get_source("source-faker", config={"count": 1000})
+source.select_streams(["users", "products"])
+result = source.read()
+
+# Iterate over records
+for record in result["users"].records:
+    print(record)
+
+# Convert to Pandas DataFrame
+df = result["users"].to_pandas()
+print(df.head())
+
+# Convert to PyArrow dataset
+arrow_dataset = result["users"].to_arrow()
+
+# Access the underlying SQL table
+sql_table = result["users"].to_sql_table()
+
+# Total records across all streams
+print(f"Total records: {result.processed_records}")
+```
+
+## AI and LLM integration
+
+PyAirbyte has built-in support for converting records to LLM document formats, making it easy to feed data into RAG pipelines:
+
+```python
+import airbyte as ab
+
+source = ab.get_source("source-github", config={
+    "credentials": {"personal_access_token": "..."},
+    "repositories": ["airbytehq/airbyte"],
+})
+
+# Read records as LangChain-compatible documents
+documents = source.get_documents(
+    stream="issues",
+    title_property="title",
+    content_properties=["body"],
+    metadata_properties=["number", "state", "created_at"],
+)
+
+for doc in documents:
+    print(doc.page_content[:200])
+```
+
+## Using PyAirbyte with Airbyte Cloud
+
+PyAirbyte can trigger and monitor connections in an existing Airbyte Cloud workspace using the `airbyte.cloud` module:
+
+```python
+import airbyte as ab
+from airbyte.cloud import CloudWorkspace
+
+workspace = CloudWorkspace(
+    workspace_id="<YOUR_WORKSPACE_ID>",
+    api_key="<YOUR_API_KEY>",
+)
+
+# Run a sync job
+job = workspace.run_sync(connection_id="<YOUR_CONNECTION_ID>")
+print(f"Job status: {job.get_status()}")
+```
+
+## Modules
+
+| Module | Description |
+|--------|-------------|
+| `airbyte` | Top-level module. Exposes `get_source`, `get_destination`, `get_secret`, and cache constructors. |
+| `airbyte.sources` | Source connector abstractions and `Source` class. |
+| `airbyte.destinations` | Destination connector abstractions and `Destination` class. |
+| `airbyte.caches` | Cache implementations: DuckDB, Postgres, Snowflake, BigQuery, MotherDuck. |
+| `airbyte.cloud` | Airbyte Cloud integration for remote job execution. |
+| `airbyte.secrets` | Secret management utilities including `SecretSourceEnum`. |
+| `airbyte.datasets` | `CachedDataset` and `LazyDataset` for working with read results. |
+| `airbyte.documents` | LLM document conversion for AI pipelines. |
+| `airbyte.results` | `ReadResult` and `WriteResult` classes. |

@@ -1,0 +1,140 @@
+---
+title: Snowflake Source
+description: Replicate tables and views from Snowflake using JDBC with full refresh or cursor-based incremental sync.
+---
+
+Airbyte's Snowflake source connector lets you replicate tables and views from a Snowflake data warehouse. It connects via JDBC using the Snowflake JDBC driver and supports both full refresh and incremental sync with a user-defined cursor field.
+
+## Prerequisites
+
+- A Snowflake account
+- A warehouse, database, and schema to replicate from
+- A Snowflake user with `SELECT` access on the schemas and tables you want to replicate
+- Network access from Airbyte to your Snowflake instance (configure network policies if needed)
+
+## Setup guide
+
+<Steps>
+  <Step title="Create a dedicated read-only Snowflake user (recommended)">
+    Run the following script in a Snowflake worksheet:
+
+    ```sql
+    -- Set variables
+    SET AIRBYTE_ROLE = 'AIRBYTE_ROLE';
+    SET AIRBYTE_USERNAME = 'AIRBYTE_USER';
+    SET AIRBYTE_PASSWORD = 'your_password_here';
+
+    BEGIN;
+
+    -- Create role and user
+    CREATE ROLE IF NOT EXISTS IDENTIFIER($AIRBYTE_ROLE);
+    CREATE USER IF NOT EXISTS IDENTIFIER($AIRBYTE_USERNAME)
+      PASSWORD = $AIRBYTE_PASSWORD
+      DEFAULT_ROLE = $AIRBYTE_ROLE;
+
+    -- Grant schema access
+    GRANT OWNERSHIP ON SCHEMA <your_schema> TO ROLE IDENTIFIER($AIRBYTE_ROLE);
+
+    COMMIT;
+    ```
+
+    To replicate from multiple schemas, grant access to each schema separately.
+  </Step>
+  <Step title="Set up the connector in Airbyte">
+    1. In Airbyte, go to **Sources** > **+ New source** and select **Snowflake**.
+    2. Enter your Snowflake host (e.g., `accountname.us-east-2.aws.snowflakecomputing.com`).
+    3. Enter your role, warehouse, database, and schema.
+    4. Enter the username and password (or configure key pair authentication).
+    5. Click **Set up source**.
+  </Step>
+</Steps>
+
+## Authentication
+
+<Tabs>
+  <Tab title="Username & Password">
+    Enter the username and password for your Snowflake user directly in the connector configuration.
+  </Tab>
+  <Tab title="Key Pair Authentication">
+    Key pair authentication provides stronger security than password-based auth:
+
+    1. Generate an RSA key pair and register the public key with your Snowflake user.
+    2. In the connector configuration, set the **Private Key** field to your PEM-encoded private key.
+    3. If the key is encrypted, also provide the **Private Key Passphrase**.
+  </Tab>
+</Tabs>
+
+## Supported sync modes
+
+| Mode | Supported |
+|------|-----------|
+| Full Refresh Sync | Yes |
+| Incremental - Append Sync | Yes |
+| Namespaces | Yes |
+
+## Incremental sync
+
+For incremental sync, you select a cursor field for each table. The connector uses a `WHERE cursor_field > last_cursor_value` clause and orders results by the cursor field.
+
+### Supported cursor field types
+
+**Date and time**: `TIMESTAMP_WITH_TIMEZONE`, `TIMESTAMP`, `TIME_WITH_TIMEZONE`, `TIME`, `DATE`
+
+**Numeric**: `TINYINT`, `SMALLINT`, `INTEGER`, `BIGINT`, `FLOAT`, `DOUBLE`, `REAL`, `NUMERIC`, `DECIMAL`
+
+**String**: `NVARCHAR`, `VARCHAR`, `LONGVARCHAR`
+
+### Choosing a good cursor field
+
+For reliable incremental sync:
+- Use monotonically increasing fields (e.g., `CREATED_AT`, `UPDATED_AT`, auto-increment `ID`).
+- Avoid fields that can be updated after record creation.
+- Avoid fields with many NULL values (NULL records are excluded from incremental sync).
+- Prefer indexed columns for better query performance on large tables.
+
+## Network policies
+
+If your Snowflake account has a network policy restricting access by IP address, add Airbyte's IP addresses to the allowed list.
+
+Check whether a network policy is active:
+```sql
+-- Check account-level policy
+SHOW PARAMETERS LIKE 'network_policy' IN ACCOUNT;
+
+-- Check user-level policy
+SHOW PARAMETERS LIKE 'network_policy' IN USER <username>;
+```
+
+## Configuration reference
+
+<ParamField path="host" type="string" required>
+  The Snowflake host domain, including account, region, cloud environment, and `snowflakecomputing.com`. Example: `accountname.us-east-2.aws.snowflakecomputing.com`.
+</ParamField>
+
+<ParamField path="role" type="string" required>
+  The Snowflake role to use for the connection. Example: `AIRBYTE_ROLE`.
+</ParamField>
+
+<ParamField path="warehouse" type="string" required>
+  The name of the Snowflake warehouse. Example: `AIRBYTE_WAREHOUSE`.
+</ParamField>
+
+<ParamField path="database" type="string" required>
+  The name of the Snowflake database. Example: `AIRBYTE_DATABASE`.
+</ParamField>
+
+<ParamField path="schema" type="string">
+  The schema to sync. If omitted, all schemas with granted permissions are presented.
+</ParamField>
+
+<ParamField path="username" type="string" required>
+  The Snowflake username.
+</ParamField>
+
+<ParamField path="password" type="string">
+  The password for the Snowflake user. Required if not using key pair authentication.
+</ParamField>
+
+<ParamField path="jdbc_url_params" type="string">
+  Additional JDBC URL parameters in `key=value` format separated by `&`.
+</ParamField>

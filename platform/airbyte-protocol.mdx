@@ -1,0 +1,171 @@
+---
+title: "Airbyte Protocol"
+description: "The specification that defines how sources and destinations communicate with the Airbyte platform"
+---
+
+# Airbyte Protocol
+
+The Airbyte Protocol describes a series of standard components and interactions that define an ELT pipeline. All message passing uses serialized JSON for inter-process communication.
+
+## Key concepts
+
+The protocol defines two types of **Actors**: Sources and Destinations.
+
+- **Source** — An application that extracts data from an underlying data store (database, API, file, etc.)
+- **Destination** — An application that loads data into a data store (warehouse, lake, database)
+- **Stream** — Describes the schema of a resource (like a database table or API resource) and metadata about how a user can interact with it
+- **Field** — A "column" within a stream
+- **Catalog** — A list of Streams that describes all the data a Source can provide
+- **Configured Catalog** — The subset of the Catalog selected by the user for a specific connection
+
+## Actor interface
+
+All actors implement two common methods:
+
+```
+spec() -> ConnectorSpecification
+check(Config) -> AirbyteConnectionStatus
+```
+
+Sources additionally implement:
+
+```
+discover(Config) -> AirbyteCatalog
+read(Config, ConfiguredAirbyteCatalog, State) -> AirbyteRecordMessage[]
+```
+
+Destinations additionally implement:
+
+```
+write(Config, ConfiguredAirbyteCatalog, AirbyteRecordMessage[]) -> AirbyteStateMessage[]
+```
+
+## Methods in detail
+
+<AccordionGroup>
+  <Accordion title="spec() — Return connector configuration schema">
+    The `spec` command allows an actor to broadcast information about itself and how it can be configured.
+
+    **Output:** `ConnectorSpecification` — a JSON Schema describing the configuration required to connect. For example:
+
+    ```json
+    {
+      "documentationUrl": "https://docs.airbyte.com/integrations/sources/postgres",
+      "connectionSpecification": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "required": ["host", "port", "database", "username"],
+        "properties": {
+          "host": { "type": "string", "description": "Hostname of the database" },
+          "port": { "type": "integer", "default": 5432 },
+          "database": { "type": "string" },
+          "username": { "type": "string" },
+          "password": { "type": "string", "airbyte_secret": true }
+        }
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="check(Config) — Validate connector credentials">
+    Validates that the provided configuration is valid and that Airbyte can connect to the underlying data store.
+
+    **Input:** `Config` — the connector configuration object
+
+    **Output:** `AirbyteConnectionStatus` with status `SUCCEEDED` or `FAILED` and an optional message.
+
+    ```json
+    { "status": "SUCCEEDED", "message": null }
+    ```
+  </Accordion>
+
+  <Accordion title="discover(Config) — Return source catalog/schema">
+    Returns a catalog of all streams available in the source, with their schemas.
+
+    **Input:** `Config`
+
+    **Output:** `AirbyteCatalog` containing a list of `AirbyteStream` objects:
+
+    ```json
+    {
+      "streams": [
+        {
+          "name": "users",
+          "json_schema": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "integer" },
+              "email": { "type": "string" },
+              "created_at": { "type": "string", "format": "date-time" }
+            }
+          },
+          "supported_sync_modes": ["full_refresh", "incremental"],
+          "source_defined_cursor": true,
+          "default_cursor_field": ["created_at"]
+        }
+      ]
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="read(Config, Catalog, State) — Read records from source">
+    Reads data from the source according to the configured catalog and state.
+
+    **Inputs:**
+    - `Config` — connector configuration
+    - `ConfiguredAirbyteCatalog` — the user-selected streams and sync modes
+    - `State` — optional state from the previous sync for incremental syncs
+
+    **Output:** A stream of `AirbyteMessage` objects including:
+    - `RECORD` messages — actual data records
+    - `STATE` messages — checkpoints for resumability
+    - `LOG` messages — informational logs
+    - `TRACE` messages — error traces
+  </Accordion>
+
+  <Accordion title="write(Config, Catalog, Records) — Write records to destination">
+    Writes records to the destination data store.
+
+    **Inputs:**
+    - `Config` — destination configuration
+    - `ConfiguredAirbyteCatalog` — stream configurations
+    - Records via STDIN — stream of `AirbyteRecordMessage`
+
+    **Output:** `AirbyteStateMessage` objects confirming committed data
+  </Accordion>
+</AccordionGroup>
+
+## Message format
+
+All messages are JSON objects wrapped in an `AirbyteMessage` envelope:
+
+```json
+{
+  "type": "RECORD",
+  "record": {
+    "stream": "users",
+    "data": { "id": 42, "email": "user@example.com" },
+    "emitted_at": 1706745600000
+  }
+}
+```
+
+**Message types:** `RECORD`, `STATE`, `LOG`, `SPEC`, `CONNECTION_STATUS`, `CATALOG`, `TRACE`, `CONTROL`
+
+<Note>
+Each message must be on its own line. Messages cannot span multiple lines. STDERR is reserved for log messages only.
+</Note>
+
+## Protocol versioning
+
+The Airbyte Protocol is versioned independently from the Airbyte Platform. The version determines compatibility between connectors and the platform.
+
+| Version | Date | Change |
+|---------|------|--------|
+| `v0.5.2` | 2023-12-26 | Remove unused V1 |
+| `v0.5.0` | 2023-11-13 | `AirbyteStateStatsMessage` added |
+| `v0.4.2` | 2023-04-12 | `AirbyteAnalyticsTraceMessage` added |
+| `v0.3.3` | 2023-04-12 | `AirbyteStreamStatusMessage` added |
+| `v0.2.0` | 2022-06-10 | `STREAM` and `GLOBAL` STATE messages |
+| `v0.1.0` | 2022-05-03 | `AirbyteTraceMessage` added |
+| `v0.0.0` | 2020-11-18 | Initial version |

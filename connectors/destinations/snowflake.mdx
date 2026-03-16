@@ -1,0 +1,140 @@
+---
+title: Snowflake Destination
+description: Load data into Snowflake by creating dedicated Airbyte entities and configuring username/password or key pair authentication.
+---
+
+Airbyte's certified Snowflake destination connector loads data into a Snowflake data warehouse. It supports all Airbyte sync modes and produces tables with Airbyte metadata columns.
+
+## Prerequisites
+
+- A Snowflake account with the `ACCOUNTADMIN` role (or an admin who can create the required entities on your behalf)
+- If your account has a network policy, Airbyte's IP addresses must be on the allowed list
+
+## Setup guide
+
+<Steps>
+  <Step title="Create Airbyte-specific Snowflake entities">
+    Run the following script in a Snowflake worksheet to create a dedicated role, user, warehouse, and database for Airbyte:
+
+    ```sql
+    -- Set variables (use uppercase)
+    SET airbyte_role = 'AIRBYTE_ROLE';
+    SET airbyte_username = 'AIRBYTE_USER';
+    SET airbyte_warehouse = 'AIRBYTE_WAREHOUSE';
+    SET airbyte_database = 'AIRBYTE_DATABASE';
+    SET airbyte_schema = 'AIRBYTE_SCHEMA';
+    SET airbyte_password = 'your_secure_password';
+
+    BEGIN;
+
+    USE ROLE securityadmin;
+    CREATE ROLE IF NOT EXISTS IDENTIFIER($airbyte_role);
+    GRANT ROLE IDENTIFIER($airbyte_role) TO ROLE SYSADMIN;
+
+    CREATE USER IF NOT EXISTS IDENTIFIER($airbyte_username)
+      PASSWORD = $airbyte_password
+      DEFAULT_ROLE = $airbyte_role
+      DEFAULT_WAREHOUSE = $airbyte_warehouse;
+    GRANT ROLE IDENTIFIER($airbyte_role) TO USER IDENTIFIER($airbyte_username);
+
+    USE ROLE sysadmin;
+    CREATE WAREHOUSE IF NOT EXISTS IDENTIFIER($airbyte_warehouse)
+      WAREHOUSE_SIZE = xsmall
+      WAREHOUSE_TYPE = standard
+      AUTO_SUSPEND = 60
+      AUTO_RESUME = true
+      INITIALLY_SUSPENDED = true;
+    CREATE DATABASE IF NOT EXISTS IDENTIFIER($airbyte_database);
+
+    GRANT USAGE ON WAREHOUSE IDENTIFIER($airbyte_warehouse)
+      TO ROLE IDENTIFIER($airbyte_role);
+    GRANT OWNERSHIP ON DATABASE IDENTIFIER($airbyte_database)
+      TO ROLE IDENTIFIER($airbyte_role);
+
+    COMMIT;
+    ```
+  </Step>
+  <Step title="Set up the Snowflake connector in Airbyte">
+    1. In Airbyte, go to **Destinations** > **+ New destination** and select **Snowflake**.
+    2. Enter a name for the destination.
+    3. For **Host**, enter your Snowflake host (e.g., `accountname.us-east-2.aws.snowflakecomputing.com`).
+    4. For **Role**, enter `AIRBYTE_ROLE`.
+    5. For **Warehouse**, enter `AIRBYTE_WAREHOUSE`.
+    6. For **Database**, enter `AIRBYTE_DATABASE`.
+    7. For **Default Schema**, enter `AIRBYTE_SCHEMA`.
+    8. For **Username**, enter `AIRBYTE_USER`.
+    9. Enter your password or configure key pair authentication.
+    10. Click **Set up destination**.
+  </Step>
+</Steps>
+
+## Authentication
+
+<Tabs>
+  <Tab title="Username & Password">
+    Enter the username and password you created in Step 1.
+  </Tab>
+  <Tab title="Key Pair Authentication">
+    Key pair authentication is more secure than password-based auth:
+
+    1. Generate an RSA key pair.
+    2. Register the public key with your Snowflake user:
+       ```sql
+       ALTER USER AIRBYTE_USER SET RSA_PUBLIC_KEY='<your_public_key>';
+       ```
+    3. In the connector, set **Private Key** to your PEM-encoded private key.
+    4. If the key is encrypted, also set the **Private Key Passphrase**.
+  </Tab>
+</Tabs>
+
+## Network policies
+
+If your Snowflake account restricts access by IP, add Airbyte's IP addresses to the allowed list.
+
+```sql
+-- Check account-level policy
+SHOW PARAMETERS LIKE 'network_policy' IN ACCOUNT;
+
+-- Check user-level policy
+SHOW PARAMETERS LIKE 'network_policy' IN USER AIRBYTE_USER;
+```
+
+## Supported sync modes
+
+| Mode | Supported |
+|------|-----------|
+| Full Refresh - Overwrite | Yes |
+| Full Refresh - Append | Yes |
+| Full Refresh - Overwrite + Deduped | Yes |
+| Incremental - Append | Yes |
+| Incremental - Append + Deduped | Yes |
+
+## Configuration reference
+
+<ParamField path="host" type="string" required>
+  The Snowflake account host, e.g., `accountname.us-east-2.aws.snowflakecomputing.com`.
+</ParamField>
+
+<ParamField path="role" type="string" required>
+  The Snowflake role to use. Example: `AIRBYTE_ROLE`.
+</ParamField>
+
+<ParamField path="warehouse" type="string" required>
+  The Snowflake warehouse. Example: `AIRBYTE_WAREHOUSE`.
+</ParamField>
+
+<ParamField path="database" type="string" required>
+  The Snowflake database. Example: `AIRBYTE_DATABASE`.
+</ParamField>
+
+<ParamField path="schema" type="string" required>
+  The default schema for Airbyte tables. Example: `AIRBYTE_SCHEMA`.
+</ParamField>
+
+<ParamField path="username" type="string" required>
+  The Snowflake username. Example: `AIRBYTE_USER`.
+</ParamField>
+
+<ParamField path="password" type="string">
+  The Snowflake user password. Required if not using key pair authentication.
+</ParamField>

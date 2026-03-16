@@ -1,0 +1,165 @@
+---
+title: MySQL Source
+description: Replicate data from MySQL databases using CDC via the binary log or standard cursor-based incremental sync.
+---
+
+Airbyte's certified MySQL source connector replicates data from MySQL databases. It supports Change Data Capture (CDC) via the MySQL binary log (binlog) for capturing inserts, updates, and deletes, and standard incremental sync using a cursor field.
+
+<Info>
+The minimum required Airbyte platform version for this connector is **v0.58.0**.
+</Info>
+
+## Prerequisites
+
+- A running MySQL instance (version 5.7 or later)
+- A database user with `SELECT`, `RELOAD`, `SHOW DATABASES`, `REPLICATION SLAVE`, and `REPLICATION CLIENT` privileges
+- For CDC: binary logging enabled on the MySQL server
+- For Airbyte Cloud: network access from Airbyte IP addresses to your database
+
+## Quick start
+
+<Steps>
+  <Step title="Create a dedicated read-only MySQL user">
+    ```sql
+    CREATE USER airbyte_user IDENTIFIED BY 'your_password_here';
+
+    GRANT SELECT, RELOAD, SHOW DATABASES, REPLICATION SLAVE, REPLICATION CLIENT
+      ON *.* TO airbyte_user;
+    ```
+
+    If you're using Standard replication (not CDC), only `SELECT` is required.
+  </Step>
+  <Step title="Enable binary logging on your MySQL server">
+    For CDC to work, the binary log must be enabled with `ROW` format. Most cloud providers (AWS RDS, GCP Cloud SQL) offer one-click options for this.
+
+    For self-managed MySQL, add the following to your MySQL configuration file:
+
+    ```ini
+    server-id                   = 223344
+    log_bin                     = mysql-bin
+    binlog_format               = ROW
+    binlog_row_image            = FULL
+    binlog_expire_logs_seconds  = 864000
+    ```
+
+    <Note>
+    AWS RDS uses `binlog retention hours` instead of `binlog_expire_logs_seconds`. The default is 0 (immediate deletion). Increase this value using the RDS-specific procedure in the AWS documentation.
+    </Note>
+  </Step>
+  <Step title="Create a new MySQL source in Airbyte">
+    1. In Airbyte, go to **Sources** and click **+ New source**.
+    2. Select **MySQL** from the list.
+    3. Enter your database hostname, port, and database name.
+    4. Enter the username and password you created above.
+    5. Select an SSL mode (recommended: `required` or `verify_ca`).
+    6. For **Replication Method**, select **Read Changes using Binary Log (CDC)** (recommended).
+    7. Click **Set up source**.
+  </Step>
+  <Step title="(Airbyte Cloud only) Allow inbound traffic">
+    Add Airbyte's IP addresses to your database's allowlist. 
+  </Step>
+</Steps>
+
+## Replication methods
+
+### CDC (recommended)
+
+Airbyte uses logical replication of the [MySQL binary log](https://dev.mysql.com/doc/refman/8.0/en/binary-log.html) to incrementally capture inserts, updates, and deletes. CDC is the recommended approach because it:
+
+- Captures deletions.
+- Scales to very large tables (1 TB and more).
+- Provides a reliable cursor that doesn't depend on your data model.
+
+### Standard (cursor-based)
+
+Standard replication uses a cursor field you define (such as `updated_at`) to track new and changed records. Use this only when:
+
+- Your MySQL server does not expose the binary log.
+- Your data set is small and you just want a snapshot of your tables.
+
+<Warning>
+Standard replication does not capture deletes.
+</Warning>
+
+## Connecting with SSL or SSH
+
+<Accordion title="SSL modes">
+  | Mode | Description |
+  |------|-------------|
+  | `preferred` | Encrypt only if supported by the server |
+  | `required` | Always encrypt (default) |
+  | `verify_ca` | Always encrypt; verify server certificate |
+  | `verify_identity` | Always encrypt; verify server identity |
+
+  On Airbyte Cloud, `preferred` mode requires an SSH tunnel.
+</Accordion>
+
+<Accordion title="SSH tunneling">
+  To connect through a bastion host:
+
+  1. Select **SSH Key Authentication** or **Password Authentication** from the tunnel dropdown.
+  2. Enter the **SSH Tunnel Jump Server Host**, **SSH Connection Port** (default 22), and **SSH Login Username**.
+  3. Provide either the RSA private key or password.
+
+  Generate an RSA private key:
+  ```bash
+  ssh-keygen -t rsa -m PEM -f myuser_rsa
+  ```
+</Accordion>
+
+## Supported sync modes
+
+| Mode | Supported |
+|------|-----------|
+| Full Refresh - Overwrite | Yes |
+| Full Refresh - Append | Yes |
+| Incremental - Append | Yes |
+| Incremental - Append + Deduped | Yes |
+
+## Data type mapping
+
+| MySQL type | Airbyte type | Notes |
+|-----------|-------------|-------|
+| `bit(1)`, `boolean`, `tinyint(1)` | boolean | |
+| `tinyint(>1)`, `smallint`, `mediumint`, `int`, `bigint` | integer | |
+| `float`, `double`, `decimal` | number | |
+| `char`, `varchar`, `text`, `longtext` | string | |
+| `date` | string | ISO 8601 date; ZERO-DATE → NULL |
+| `datetime`, `timestamp` | string | ISO 8601 datetime; ZERO-DATE → NULL |
+| `time` | string | ISO 8601 time |
+| `year` | integer | |
+| `json` | string | Serialized JSON |
+| `enum`, `set` | string | |
+| `blob`, `tinyblob`, `mediumblob`, `longblob` | base64 string | |
+| `binary`, `varbinary` | base64 string | |
+| `geometry` | base64 string | |
+
+## Configuration reference
+
+<ParamField path="host" type="string" required>
+  The hostname or IP address of your MySQL server.
+</ParamField>
+
+<ParamField path="port" type="integer" required>
+  The port your MySQL server listens on. Default: `3306`.
+</ParamField>
+
+<ParamField path="database" type="string" required>
+  The name of the database to replicate from.
+</ParamField>
+
+<ParamField path="username" type="string" required>
+  The username to authenticate with.
+</ParamField>
+
+<ParamField path="password" type="string" required>
+  The password to authenticate with.
+</ParamField>
+
+<ParamField path="ssl" type="string">
+  The SSL connection mode. One of `preferred`, `required`, `verify_ca`, or `verify_identity`.
+</ParamField>
+
+<ParamField path="replication_method" type="string" required>
+  The replication method. Either `CDC` (recommended) or `STANDARD`.
+</ParamField>

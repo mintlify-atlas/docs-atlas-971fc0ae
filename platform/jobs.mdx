@@ -1,0 +1,110 @@
+---
+title: "Jobs & Workloads"
+description: "How Airbyte orchestrates and executes data sync operations"
+---
+
+# Jobs and workloads
+
+In Airbyte, all connector operations run as **workloads** — Kubernetes pods that encapsulate the discrete invocation of one or more connector interface methods (READ, WRITE, CHECK, DISCOVER, SPEC).
+
+## Workload types
+
+<CardGroup cols={2}>
+  <Card title="Replication (Sync) pods" icon="arrows-left-right">
+    Calls `READ` on the source and `WRITE` on the destination Docker images. The source, destination, and orchestrator all run in a single pod.
+  </Card>
+  <Card title="Connector Job pods" icon="plug">
+    Calls a single interface method (`CHECK`, `DISCOVER`, or `SPEC`) on a connector image. A sidecar processes the connector output.
+  </Card>
+</CardGroup>
+
+## Pod internals
+
+### Container Orchestrator
+
+An Airbyte-controlled container inside every Replication pod. It sits between the source and destination containers and is responsible for:
+
+- PII scrubbing
+- Aggregating stats and metrics
+- Transforming data
+- Checkpointing sync progress
+- Interpreting and recording connector operation results
+- Logging and auth token refresh
+
+### Connector Sidecar
+
+An Airbyte-controlled container inside every Connector Job pod. It:
+
+- Reads the output of the connector container
+- Interprets and records connector operation results
+- Handles logging and side effects
+
+## Workload architecture
+
+The Workload architecture decouples job scheduling from job execution:
+
+<Steps>
+  <Step title="Job created">
+    Workers communicate with the **Workload API Server** to create a workload, rather than directly starting jobs.
+  </Step>
+  <Step title="Job queued">
+    The **Workload API Server** places the job in a queue.
+  </Step>
+  <Step title="Job launched">
+    The **Launcher** picks up the job and launches the required Kubernetes pods. It throttles job creation based on available resources to minimize deadlock situations.
+  </Step>
+  <Step title="Job executes">
+    The pod runs the connector operations and reports status back to the Workload API.
+  </Step>
+</Steps>
+
+This design means jobs stay queued until more resources are available rather than failing immediately. It provides better back-pressure and self-healing in resource-constrained environments.
+
+## Sync jobs
+
+A sync job is an individual invocation of the Airbyte pipeline to synchronize data from a source to a destination.
+
+### Job status states
+
+| Status | Description |
+|--------|-------------|
+| `pending` | Job created and waiting to start |
+| `running` | Job is actively executing |
+| `incomplete` | Current attempt failed; another attempt will be made |
+| `succeeded` | Job completed successfully |
+| `failed` | All retry attempts exhausted |
+| `cancelled` | Job was manually cancelled |
+
+### Retry rules
+
+Airbyte automatically retries failed syncs. By default:
+
+- **5** subsequent attempts where no data was synchronized
+- **10** total attempts where no data was synchronized  
+- **20** total attempts where some data was synchronized
+
+<Note>
+For self-hosted instances, retry values are configurable. See the operator configuration guide for details.
+</Note>
+
+### Retry backoff
+
+After a failed attempt with no data synchronized, Airbyte waits before retrying:
+
+| Failure count | Backoff period |
+|---------------|----------------|
+| After 1st failure | 10 seconds |
+| After 2nd failure | 30 seconds |
+| After 3rd failure | 90 seconds |
+| After 4th failure | 4 minutes 30 seconds |
+
+A partially successful attempt (some data synced) resets the backoff counter.
+
+## Concurrency configuration
+
+Configure the maximum number of concurrent jobs with environment variables:
+
+```bash
+MAX_CHECK_WORKERS=5    # Max concurrent CHECK jobs
+MAX_SYNC_WORKERS=10    # Max concurrent SYNC jobs
+```

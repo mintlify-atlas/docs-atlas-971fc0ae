@@ -1,0 +1,160 @@
+---
+title: MCP servers
+description: Use Airbyte's Model Context Protocol servers to give AI agents access to Airbyte documentation, connectors, and workspace management.
+---
+
+Airbyte provides MCP (Model Context Protocol) servers that connect AI agents to Airbyte's capabilities. Whether you want an AI agent that can look up Airbyte documentation, manage connector configurations, or build custom connectors, there is an MCP server for each use case.
+
+<CardGroup cols={2}>
+  <Card title="Airbyte knowledge MCP" icon="book-open" href="#airbyte-knowledge-mcp-server">
+    A hosted server that gives AI agents semantic search over Airbyte's documentation, API specs, and GitHub content.
+  </Card>
+  <Card title="PyAirbyte MCP" icon="python" href="#pyairbyte-mcp-server">
+    A local MCP server for managing Airbyte connectors and workspaces through AI assistants.
+  </Card>
+  <Card title="Connector Builder MCP" icon="wrench" href="#connector-builder-mcp-server">
+    AI-assisted connector development. Coming soon.
+  </Card>
+</CardGroup>
+
+---
+
+## Airbyte knowledge MCP server
+
+The Airbyte knowledge MCP server connects AI agents to comprehensive information about Airbyte. It provides semantic search over:
+
+- Airbyte documentation and website
+- OpenAPI specifications
+- YouTube content
+- GitHub issues, discussions, and pull requests
+
+This server is useful when your AI agent is working on tasks that involve Airbyte — building connectors, configuring sources and destinations, troubleshooting syncs, or learning about Airbyte's architecture.
+
+**Server URL:** `https://airbyte.mcp.kapa.ai`
+
+### Connect to the server
+
+<Tabs>
+  <Tab title="Claude">
+    Run the following command in your terminal:
+
+    ```bash
+    claude mcp add --transport http airbyte-docs https://airbyte.mcp.kapa.ai
+    ```
+
+    To manually trigger authentication (or re-authenticate):
+
+    1. In your Claude Code session, type `/mcp list`.
+    2. Select **airbyte-docs** from the list.
+    3. Complete the Google authentication flow in your browser.
+    4. You will see "Authentication successful. Connected to airbyte-docs." when done.
+  </Tab>
+  <Tab title="Cursor / VS Code">
+    Click the **Ask AI** button in the [Airbyte documentation](https://docs.airbyte.com), then select the MCP install option from the dropdown menu. This connects with one click.
+  </Tab>
+  <Tab title="Other tools">
+    The Airbyte knowledge MCP works with any MCP-compatible tool, including Windsurf and ChatGPT Desktop. Refer to your tool's documentation for instructions on adding MCP servers, and use the server URL:
+
+    ```
+    https://airbyte.mcp.kapa.ai
+    ```
+  </Tab>
+</Tabs>
+
+### Authentication
+
+When connecting for the first time, you will be prompted to sign in with a Google account. This is used only to enforce rate limits. Airbyte does not access your email, name, or other personal data.
+
+### Rate limits
+
+| Limit | Value |
+|-------|-------|
+| Requests per hour | 40 |
+| Requests per day | 200 |
+
+---
+
+## PyAirbyte MCP server
+
+<Warning>
+The PyAirbyte MCP server is experimental and may change without notice between minor versions of PyAirbyte.
+</Warning>
+
+The PyAirbyte MCP server is a local server that lets AI assistants manage Airbyte connectors through the MCP protocol. You can use it to list connectors, validate configurations, and run sync operations — all through natural language prompts in your AI assistant.
+
+### Prerequisites
+
+- `uv` installed (`brew install uv` on macOS)
+- Python 3.11
+- A dotenv secrets file with your Airbyte Cloud credentials and connector configurations
+
+### Quick start
+
+<Steps>
+  <Step title="Install uv">
+    ```bash
+    brew install uv
+    ```
+  </Step>
+
+  <Step title="Create a secrets file">
+    Create a `.env` file with your Airbyte Cloud credentials and any connector-specific secrets your agent will use:
+
+    ```bash
+    AIRBYTE_CLIENT_ID=your_client_id
+    AIRBYTE_CLIENT_SECRET=your_client_secret
+    AIRBYTE_WORKSPACE_ID=your_workspace_id
+    ```
+  </Step>
+
+  <Step title="Register the MCP server">
+    Add the server to your MCP client configuration:
+
+    ```bash
+    uvx --python=3.11 --from=airbyte@latest airbyte-mcp
+    ```
+  </Step>
+
+  <Step title="Test the connection">
+    Use your MCP client to verify the server is working. Try one of these prompts:
+
+    - "Use your MCP tools to list all available Airbyte connectors."
+    - "Use your MCP tools to check your connection to your Airbyte Cloud workspace."
+    - "Use your MCP tools to list all available destinations in my Airbyte Cloud workspace."
+  </Step>
+</Steps>
+
+### Example prompts
+
+Once connected, you can ask your AI assistant to:
+
+- "List all available Airbyte connectors."
+- "Get information about the Airbyte Stripe connector."
+- "List all variables you have access to in the dotenv secrets file."
+- "Check my connection to my Airbyte Cloud workspace."
+- "List all available destinations in my Airbyte Cloud workspace."
+
+### Full documentation
+
+For complete setup instructions, the security model, architecture overview, and a troubleshooting guide, see the [PyAirbyte MCP server documentation](https://airbytehq.github.io/PyAirbyte/airbyte/mcp.html).
+
+---
+
+## Connector Builder MCP server
+
+<Note>
+The Connector Builder MCP server is currently under active development and is not yet publicly available.
+</Note>
+
+The Connector Builder MCP server will provide an AI-driven experience for building and testing Airbyte connectors. It will allow AI assistants to help developers create, configure, and validate custom connectors through a standardized interface.
+
+If you are an active Airbyte customer interested in early access, reach out to your sales representative.
+
+---
+
+## Additional resources
+
+- [Model Context Protocol documentation](https://modelcontextprotocol.io/)
+- [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)
+- [PyAirbyte GitHub issues](https://github.com/airbytehq/pyairbyte/issues)
+- [PyAirbyte contributing guide](https://github.com/airbytehq/PyAirbyte/blob/main/docs/CONTRIBUTING.md)

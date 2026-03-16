@@ -1,0 +1,106 @@
+---
+title: "Submit a New Connector"
+description: "Contribute your connector to the Airbyte Marketplace so others can use it."
+---
+
+Once your connector is built and tested, you can contribute it to the Airbyte Marketplace. The process differs depending on how you built your connector.
+
+## Connector Builder connectors (recommended)
+
+Connector Builder connectors are the fastest to review and easiest to maintain.
+
+<Steps>
+  <Step title="Build and test your connector">
+    Complete your connector in Connector Builder and verify it works with a real source. Make sure authentication, pagination, and incremental sync work correctly for all streams.
+  </Step>
+  <Step title="Click Publish → Contribute to Marketplace">
+    In Connector Builder, click the **Publish** chevron and select **Contribute to Marketplace**.
+  </Step>
+  <Step title="Fill out the contribution form">
+    Provide:
+    - A connector description explaining what the source is and what data it provides
+    - Your [GitHub Personal Access Token](#obtaining-a-github-personal-access-token) to authorize the PR
+  </Step>
+  <Step title="Click Contribute">
+    Connector Builder creates a pull request on your behalf in the Airbyte GitHub repository.
+  </Step>
+  <Step title="Wait for review">
+    The Airbyte Marketplace team reviews the PR. Reviews typically take under a week.
+  </Step>
+</Steps>
+
+### Obtaining a GitHub Personal Access Token
+
+You need a [classic GitHub PAT](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-personal-access-token-classic) with `workflow` scope.
+
+<Steps>
+  <Step title="Go to Developer settings">
+    In the upper-right corner of GitHub, click your profile photo → **Settings** → **Developer settings**.
+  </Step>
+  <Step title="Generate a classic token">
+    Under **Personal access tokens**, click **Tokens (classic)** → **Generate new token (classic)**.
+  </Step>
+  <Step title="Add the workflow scope">
+    Check the **workflow** scope, then click **Generate Token**.
+  </Step>
+  <Step title="Copy the token">
+    Copy the token immediately — you won't be able to see it again. Paste it into the Airbyte contribution form.
+  </Step>
+</Steps>
+
+## Python CDK connectors
+
+For connectors built with the Python CDK or Low-Code CDK outside of Connector Builder.
+
+### 1. File or find a discussion
+
+Before opening a PR, check whether there's an existing [Discussion or issue](https://github.com/airbytehq/airbyte/discussions/categories/new-connector-request) for the connector. If not, [open a new connector request](https://github.com/airbytehq/airbyte/discussions/new?category=new-connector-request).
+
+This ensures your contribution doesn't overlap with existing work and aligns with Airbyte's product direction. If you don't hear back within a few days, ping the team on [Slack](https://slack.airbyte.io).
+
+### 2. Open a pull request
+
+Your PR must include:
+
+- All connector code and tests
+- A `README.md` for the connector
+- Documentation in the `docs/integrations/sources/` directory
+- An `icon.svg`
+- A valid `metadata.yaml`
+
+```bash
+# Verify tests pass before opening the PR
+poe test-unit-tests
+poe test-integration-tests
+```
+
+Follow the [pull request title convention](https://docs.airbyte.comhttps://github.com/airbytehq/airbyte/blob/master/CONTRIBUTING.mdresources/pull-requests-handbook#pull-request-title-convention).
+
+### 3. PR review criteria
+
+Reviewers check for:
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="lock">
+    Does the connector implement authentication correctly?
+  </Card>
+  <Card title="Pagination" icon="arrow-right">
+    Does the connector paginate through all results?
+  </Card>
+  <Card title="Incremental sync" icon="clock">
+    Does the connector support incremental sync where the API allows it?
+  </Card>
+  <Card title="Stream coverage" icon="table">
+    Does the PR add a reasonable set of streams for the source?
+  </Card>
+  <Card title="Unit tests" icon="vial">
+    Are unit tests included for custom Python components?
+  </Card>
+  <Card title="Sandbox account" icon="flask">
+    Can you provide sandbox credentials for CI to use in future tests?
+  </Card>
+</CardGroup>
+
+### 4. Provide a sandbox account
+
+For some APIs, the review team will ask for a sandbox account. This account is used to set up CI credentials so the connector is automatically tested on every future update.

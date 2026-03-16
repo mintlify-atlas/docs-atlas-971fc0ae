@@ -1,0 +1,140 @@
+---
+title: Schema change management
+description: Control how Airbyte detects and propagates schema changes in your sources to keep your pipelines running smoothly.
+---
+
+You can configure each connection to control how Airbyte handles schema changes in the source. This helps ensure accurate syncs and reduces manual maintenance of your data pipelines.
+
+To view or change this setting, navigate to a connection's **Settings** tab.
+
+## How Airbyte detects schema changes
+
+Airbyte automatically checks for schema changes in your source before each sync.
+
+- **Airbyte Cloud** — Checks at most every 15 minutes per source. If a check was performed within the last 15 minutes, the previous result is used.
+- **Self-managed Airbyte** — Checks at most every 24 hours. Schema changes may not be detected immediately if the last check was recent.
+
+You can also manually refresh the schema at any time.
+
+### Types of schema changes
+
+| Change type | Behavior | Breaking? |
+| --- | --- | --- |
+| New column/field | Created in the destination. Values are populated for updated rows. Rows not updated in the sync may be missing the new value unless a backfill is run. | No |
+| Column/field removed | The field is retained in the destination but stops receiving new values. If the stream is cleared or refreshed, the field and its historical data are removed. | No |
+| New stream | Created in the destination on first sync; all data is loaded as if it's an initial sync. | No |
+| Stream removed | The stream stops updating; existing data in the destination is retained. | No |
+| Column data type change | Existing data is unchanged. For Destinations V2, rows with incompatible types produce a row error in `_airbyte_meta`. You must refresh the schema and stream to resolve type inconsistencies. | No |
+| Cursor removed | The connection is paused immediately for manual review. | Yes |
+| Primary key removed | The connection is paused immediately for manual review. | Yes |
+
+## Schema change propagation settings
+
+The **Detect and propagate schema changes** setting controls what Airbyte does when it detects a change.
+
+| Setting | Description |
+| --- | --- |
+| **Propagate field changes only** | Column additions and removals are propagated automatically. New or removed streams are ignored. |
+| **Propagate all field and stream changes** | All schema changes — new/removed streams and new/removed columns and data type changes — are propagated automatically. |
+| **Approve all changes myself** | Schema changes are detected but not applied. Syncs continue with the current schema. You must manually review and approve changes to propagate them. |
+| **Stop future syncs** | The connection is automatically paused as soon as any schema change is detected. |
+
+### Automatic propagation
+
+When you select **Propagate field changes only** or **Propagate all field and stream changes**, non-breaking schema changes are automatically applied to the next sync. Breaking changes (removed cursor or primary key) always pause the connection regardless of this setting.
+
+### Manual review of non-breaking changes
+
+If you've selected **Approve all changes myself**:
+
+<Steps>
+  <Step title="Open the connection">
+    In the Airbyte UI, click **Connections** and select the connection. Navigate to the **Schema** tab. A blue "i" icon next to the tab indicates detected changes.
+  </Step>
+  <Step title="Review changes">
+    Click **Review changes**. The **Refreshed source schema** dialog shows the detected changes.
+  </Step>
+  <Step title="Apply changes">
+    Review the changes, click **OK** to close the dialog, then click **Save changes**. The changes will take effect on the next sync.
+  </Step>
+</Steps>
+
+### Resolving breaking schema changes
+
+Breaking changes (removed cursor or primary key) pause the connection immediately regardless of your propagation setting.
+
+<Steps>
+  <Step title="Open the connection">
+    In the Airbyte UI, click **Connections** and select the paused connection. Navigate to the **Schema** tab. A red "i" icon indicates a breaking change.
+  </Step>
+  <Step title="Fix the stream configuration">
+    Click the affected stream to open its field details. Confirm that a cursor and primary key are still selected.
+  </Step>
+  <Step title="Save and re-enable">
+    Click **Save changes**. You will be prompted to refresh or clear the affected streams. Airbyte strongly recommends refreshing or clearing the streams to ensure future syncs succeed.
+  </Step>
+</Steps>
+
+## Backfill new or renamed columns
+
+The **Backfill new or renamed columns** setting works in conjunction with automatic schema change propagation. When enabled, any time a new column is detected and propagated, Airbyte re-syncs the entire affected stream to populate the new column for all existing rows — not just rows updated during the sync.
+
+This feature only triggers when:
+- **Detect and propagate schema changes** is set to **Propagate all changes** or **Propagate column changes only**, AND
+- Airbyte detects the schema change automatically as part of a sync (not from a manual schema refresh).
+
+<Warning>
+Enabling automatic backfills may increase destination compute costs because the entire stream is re-synced.
+</Warning>
+
+<Note>
+For Airbyte Cloud users, streams containing new or renamed columns are not billed during the backfill sync. Other streams in the same sync are billed as usual.
+</Note>
+
+## Manually refresh the source schema
+
+<Steps>
+  <Step title="Open the connection">
+    In the Airbyte UI, click **Connections** and select the connection. Click the **Schema** tab.
+  </Step>
+  <Step title="Refresh the schema">
+    In the **Select streams** table, click **Refresh source schema** to fetch the latest schema from your source.
+  </Step>
+  <Step title="Review any changes">
+    If schema changes are found, review them in the **Refreshed source schema** dialog.
+  </Step>
+</Steps>
+
+## Major connector version upgrades
+
+Connectors are generally updated automatically without any action from you. However, connectors may occasionally require your approval to upgrade to a new major version. Airbyte notifies you of the new version and gives you a window to upgrade manually before the cutoff date.
+
+<Tip>
+Upgrade before the cutoff date so you can review the changes and prepare any downstream services or data models. After the window closes, connections are upgraded automatically.
+</Tip>
+
+Airbyte considers a connector change significant enough for a major version release only in these cases:
+
+| Change type | Description |
+| --- | --- |
+| Schema change | A field or stream was renamed, or a field's data type changed |
+| Stream or property removal | Previously synced data will no longer be synced |
+| New sync mode | A more efficient sync method is now available |
+| Source-defined primary key modification | The primary key was added or changed to improve sync accuracy |
+| Connector configuration change | Re-authentication or new configuration input is required |
+| Destination format / normalization change | The destination write format changed in a way that requires a full refresh |
+| State changes | The source state format changed; a full re-sync is required |
+
+### Upgrading your connector
+
+<Steps>
+  <Step title="Open the connection">
+    In the Airbyte UI, click **Connections** and select the connection with a major version change.
+  </Step>
+  <Step title="Review the changes">
+    Read the description of what changed. The major version notice shows the cutoff date by which you must upgrade.
+  </Step>
+  <Step title="Upgrade the connector">
+    Update the source or destination to the new version. Follow the connector-specific migration guide to ensure your connection continues syncing successfully.
+  </Step>
+</Steps>

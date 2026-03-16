@@ -1,0 +1,119 @@
+---
+title: "Single Sign-On (SSO)"
+description: "Configure OIDC-based SSO for Airbyte using Okta, Entra ID, or other identity providers"
+---
+
+# Single sign-on (SSO)
+
+Airbyte supports Single Sign-On (SSO) using **OpenID Connect (OIDC)**, allowing your team to log in with your existing identity provider (IdP) such as Okta, Microsoft Entra ID (Active Directory), or any OIDC-compliant provider.
+
+<Note>
+SSO is available on **Self-Managed Enterprise** and **Airbyte Cloud** plans.
+</Note>
+
+## Supported identity providers
+
+<CardGroup cols={2}>
+  <Card title="Okta" icon="lock">
+    Configure Okta as your OIDC provider for Airbyte Cloud or Self-Managed Enterprise
+  </Card>
+  <Card title="Microsoft Entra ID" icon="microsoft">
+    Use Microsoft Entra ID (Azure Active Directory) for enterprise SSO
+  </Card>
+  <Card title="Google Workspace" icon="google">
+    Allow team members to sign in with Google Workspace credentials
+  </Card>
+  <Card title="Other OIDC providers" icon="key">
+    Any OIDC-compliant identity provider is supported
+  </Card>
+</CardGroup>
+
+## Setup overview
+
+SSO setup requires administrator access to both Airbyte and your identity provider.
+
+<Tabs>
+  <Tab title="Airbyte Cloud">
+    <Steps>
+      <Step title="Contact Airbyte support">
+        Reach out to your Airbyte account team or support to initiate SSO configuration. SSO on Cloud requires coordination with Airbyte.
+      </Step>
+      <Step title="Create an OIDC application in your IdP">
+        In your identity provider, create a new OIDC application:
+        - **Application type:** Web application
+        - **Grant type:** Authorization Code
+        - **Redirect URI:** Provided by Airbyte support
+      </Step>
+      <Step title="Provide OIDC credentials to Airbyte">
+        Share your:
+        - Client ID
+        - Client Secret
+        - Discovery URL (issuer URL)
+        - Company identifier (used for login routing)
+      </Step>
+      <Step title="Test SSO login">
+        Test by visiting [cloud.airbyte.com](https://cloud.airbyte.com) and clicking **Continue with SSO**.
+      </Step>
+    </Steps>
+  </Tab>
+  <Tab title="Self-Managed Enterprise">
+    <Steps>
+      <Step title="Create an OIDC application in your IdP">
+        Create a new OIDC application in your identity provider:
+        - **Redirect URI:** `https://<your-airbyte-domain>/auth/realms/airbyte/broker/<provider-alias>/endpoint`
+        - **Grant type:** Authorization Code
+      </Step>
+      <Step title="Configure Airbyte Helm values">
+        Add the SSO configuration to your Helm values file:
+
+        ```yaml
+        global:
+          auth:
+            enabled: true
+            oidc:
+              issuer: "https://your-idp.example.com"
+              clientId: "your-client-id"
+              clientSecret: "your-client-secret"
+              displayName: "Company SSO"
+        ```
+      </Step>
+      <Step title="Apply the configuration">
+        ```bash
+        helm upgrade airbyte airbyte/airbyte \
+          --namespace airbyte \
+          --values values.yaml
+        ```
+      </Step>
+      <Step title="Test the login flow">
+        Access your Airbyte URL — it should automatically redirect to your IdP login page.
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+## Logging in with SSO
+
+<Tabs>
+  <Tab title="Airbyte Cloud">
+    1. Visit [cloud.airbyte.com](https://cloud.airbyte.com) and click **Continue with SSO**
+    2. Enter your **Company identifier**
+    3. Click **Continue with SSO** — Airbyte forwards you to your IdP's login page
+    4. Log in with your work account — your IdP redirects you back to Airbyte Cloud
+  </Tab>
+  <Tab title="Self-Managed">
+    1. Access your self-managed Airbyte URL
+    2. Airbyte automatically redirects you to your IdP login page
+    3. Log in with your IdP credentials
+    4. Your IdP redirects you back to Airbyte
+
+    <Note>
+    If you're already logged into your IdP elsewhere, Airbyte may forward you directly to the logged-in area without showing a login screen.
+    </Note>
+  </Tab>
+</Tabs>
+
+## Role mapping
+
+For Self-Managed Enterprise, you can configure automatic role mapping from IdP groups to Airbyte roles. This assigns users the correct organization and workspace roles automatically on login based on their IdP group memberships.
+
+Contact [Airbyte support](https://support.airbyte.com) for role mapping configuration details.

@@ -1,0 +1,197 @@
+---
+title: Orchestrate Airbyte with Kestra
+description: Use the Kestra Airbyte plugin to trigger self-managed and Cloud sync jobs from Kestra flows.
+---
+
+Kestra has an official plugin for Airbyte that supports both self-hosted and Airbyte Cloud deployments. The plugin lets you trigger sync jobs and wait for their completion before running downstream tasks, or fire-and-forget by setting `wait: false`.
+
+## Available tasks
+
+The Kestra Airbyte plugin provides two main task types:
+
+| Task | Target |
+|------|--------|
+| `io.kestra.plugin.airbyte.connections.Sync` | Self-hosted Airbyte |
+| `io.kestra.plugin.airbyte.cloud.jobs.Sync` | Airbyte Cloud |
+
+## Prerequisites
+
+- Docker installed with `docker-compose`
+- A running Airbyte instance (self-hosted or Cloud)
+- Airbyte connections configured with **sync frequency** set to **manual**
+
+## Setup
+
+<Steps>
+  <Step title="Start Kestra">
+    Download the Docker Compose file and start Kestra:
+
+    ```bash
+    curl -o docker-compose.yml \
+      https://raw.githubusercontent.com/kestra-io/kestra/develop/docker-compose.yml
+
+    docker compose up -d
+    ```
+
+    Navigate to the Kestra UI at [http://localhost:8080](http://localhost:8080).
+  </Step>
+
+  <Step title="Find your Airbyte connection IDs">
+    Open the Airbyte UI and navigate to each connection you want to trigger. Copy the connection UUID from the URL.
+  </Step>
+
+  <Step title="Create a flow">
+    In the Kestra UI, open the code editor and create a new flow. You can also use a Blueprint — search for "Airbyte" in the Blueprints section to find pre-built templates.
+  </Step>
+</Steps>
+
+## Basic flow (self-hosted)
+
+This flow triggers a single Airbyte sync on a schedule.
+
+```yaml
+id: airbyte_single_sync
+namespace: company.team
+description: Sync data from Stripe to BigQuery
+
+tasks:
+  - id: sync_stripe
+    type: io.kestra.plugin.airbyte.connections.Sync
+    connectionId: 9bb96539-73e7-4b9a-9937-6ce861b49cb9
+    url: http://host.docker.internal:8000/
+    username: "{{ secret('AIRBYTE_USERNAME') }}"
+    password: "{{ secret('AIRBYTE_PASSWORD') }}"
+
+triggers:
+  - id: daily_schedule
+    type: io.kestra.core.models.triggers.types.Schedule
+    cron: "0 6 * * *"
+```
+
+## Parallel syncs
+
+Run multiple Airbyte connections in parallel using the `Parallel` task.
+
+```yaml
+id: airbyte_syncs
+namespace: company.team
+description: Gotta catch 'em all!
+
+tasks:
+  - id: data_ingestion
+    type: io.kestra.core.tasks.flows.Parallel
+    tasks:
+      - id: charizard
+        type: io.kestra.plugin.airbyte.connections.Sync
+        connectionId: 9bb96539-73e7-4b9a-9937-6ce861b49cb9
+      - id: pikachu
+        type: io.kestra.plugin.airbyte.connections.Sync
+        connectionId: 39c38950-b0b9-4fce-a303-06ced3dbfa75
+      - id: psyduck
+        type: io.kestra.plugin.airbyte.connections.Sync
+        connectionId: 4de8ab1e-50ef-4df0-aa01-7f21491081f1
+
+taskDefaults:
+  - type: io.kestra.plugin.airbyte.connections.Sync
+    values:
+      url: http://host.docker.internal:8000/
+      username: "{{ secret('AIRBYTE_USERNAME') }}"
+      password: "{{ secret('AIRBYTE_PASSWORD') }}"
+
+triggers:
+  - id: every_minute
+    type: io.kestra.core.models.triggers.types.Schedule
+    cron: "*/1 * * * *"
+```
+
+## Airbyte Cloud flow
+
+Use the cloud task type to trigger syncs in an Airbyte Cloud workspace.
+
+```yaml
+id: airbyte_cloud_sync
+namespace: company.team
+
+tasks:
+  - id: sync_github
+    type: io.kestra.plugin.airbyte.cloud.jobs.Sync
+    connectionId: "<YOUR_CONNECTION_ID>"
+    apiKey: "{{ secret('AIRBYTE_CLOUD_API_KEY') }}"
+    workspaceId: "{{ secret('AIRBYTE_WORKSPACE_ID') }}"
+
+triggers:
+  - id: nightly
+    type: io.kestra.core.models.triggers.types.Schedule
+    cron: "0 0 * * *"
+```
+
+## Syncs followed by dbt transformations
+
+After Airbyte syncs complete, you can chain downstream dbt, Python, SQL, or Spark tasks using Kestra's rich plugin library.
+
+```yaml
+id: airbyte_dbt_pipeline
+namespace: company.team
+
+tasks:
+  - id: data_ingestion
+    type: io.kestra.core.tasks.flows.Parallel
+    tasks:
+      - id: sync_stripe
+        type: io.kestra.plugin.airbyte.connections.Sync
+        connectionId: "<STRIPE_CONNECTION_ID>"
+      - id: sync_github
+        type: io.kestra.plugin.airbyte.connections.Sync
+        connectionId: "<GITHUB_CONNECTION_ID>"
+
+  - id: run_dbt
+    type: io.kestra.plugin.dbt.cli.DbtCLI
+    runner: DOCKER
+    docker:
+      image: ghcr.io/kestra-io/dbt-bigquery:latest
+    commands:
+      - dbt run
+
+taskDefaults:
+  - type: io.kestra.plugin.airbyte.connections.Sync
+    values:
+      url: http://host.docker.internal:8000/
+      username: "{{ secret('AIRBYTE_USERNAME') }}"
+      password: "{{ secret('AIRBYTE_PASSWORD') }}"
+```
+
+## Using Blueprints
+
+Kestra provides ready-made Blueprint templates for common Airbyte workflows. To use them:
+
+1. In the Kestra UI, navigate to **Blueprints**.
+2. Search for `Airbyte`.
+3. Select a blueprint that matches your use case and click **Use**.
+4. Edit the connection IDs and task names, then click **Save**.
+
+Available Airbyte blueprints include:
+
+- Run a single Airbyte sync on a schedule
+- Run multiple syncs in parallel
+- Run multiple syncs in parallel, then trigger dbt CLI commands
+- Run a single Airbyte Cloud sync on a schedule
+- Run multiple Cloud syncs in parallel, then run dbt Cloud
+
+## Fire-and-forget
+
+To trigger a sync without waiting for it to complete, set `wait: false` on the task:
+
+```yaml
+tasks:
+  - id: trigger_sync
+    type: io.kestra.plugin.airbyte.connections.Sync
+    connectionId: "<YOUR_CONNECTION_ID>"
+    wait: false
+```
+
+## Additional resources
+
+- [Kestra plugin documentation](https://kestra.io/plugins/)
+- [Kestra getting started guide](https://kestra.io/docs/getting-started)
+- [Airbyte + Kestra Terraform blog post](https://airbyte.com/blog/everything-as-code-for-data-infrastructure-with-airbyte-and-kestra-terraform-providers)
+- [Kestra community Slack](https://kestra.io/slack)

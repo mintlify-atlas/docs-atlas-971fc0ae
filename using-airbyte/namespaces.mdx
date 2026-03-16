@@ -1,0 +1,75 @@
+---
+title: Namespaces
+description: Control where replicated data is written in your destination using namespace configuration.
+---
+
+Namespaces define where Airbyte writes replicated data in your destination. They are most commonly used to organize data, separate test and production environments, and enforce permissions. In relational databases, a namespace is typically a schema.
+
+You configure the namespace setting on each connection. The default configuration is **Destination-defined**.
+
+## Namespace options
+
+| Namespace setting | Description |
+| --- | --- |
+| **Destination-defined** | All streams are written to the single default namespace defined in the destination's settings. |
+| **Source-defined** | Streams are written to the namespace provided by the source, if available. For sources or streams where no namespace is provided, the destination's default namespace is used. |
+| **Custom** | All streams are written to a single user-defined namespace. |
+
+## Destination-defined
+
+All streams are written to the default namespace configured on the destination settings page. The meaning of "namespace" varies by destination:
+
+| Destination | Namespace setting |
+| :--- | :--- |
+| BigQuery | dataset |
+| MSSQL | schema |
+| MySQL | database |
+| Oracle DB | schema |
+| Postgres | schema |
+| Redshift | schema |
+| Snowflake | schema |
+| S3 | path prefix |
+| ClickHouse | database |
+
+<Tip>
+If you're replicating multiple sources into the same namespace, use the **Stream Prefix** configuration to differentiate data from each source and avoid stream name collisions.
+</Tip>
+
+## Source-defined
+
+Some sources (such as JDBC-based database sources) include namespace information with each stream. When source-defined namespaces are available, the destination writes data to the same namespace. For sources or streams where no namespace is provided, the destination falls back to its default namespace.
+
+Most APIs do not provide namespace information.
+
+## Custom
+
+All streams are written to a single namespace you specify. This is useful when you're replicating multiple sources into the same destination and want to prevent table name collisions.
+
+**Example:** If you have two GitHub connections writing to the same destination — one per repository — use a custom namespace for each connection to keep the data from different repositories separate.
+
+You can enter plain text (most common) or use the dynamic variable `${SOURCE_NAMESPACE}`, which inserts the namespace provided by the source when available.
+
+### Custom namespace examples
+
+The following table shows how different custom namespace configurations behave when replicating from a Postgres source (with a `public` source schema) to a Snowflake destination (with `my_schema` as the default schema):
+
+| Namespace configuration | Source namespace | Source table | Destination namespace | Destination table |
+| :--- | :--- | :--- | :--- | :--- |
+| Destination default | public | my_table | my_schema | my_table |
+| Destination default | (none) | my_table | my_schema | my_table |
+| Mirror source structure | public | my_table | public | my_table |
+| Mirror source structure | (none) | my_table | my_schema | my_table |
+| Custom = `"custom"` | public | my_table | custom | my_table |
+| Custom = `"${SOURCE_NAMESPACE}"` | public | my_table | public | my_table |
+| Custom = `"my_${SOURCE_NAMESPACE}_schema"` | public | my_table | my_public_schema | my_table |
+| Custom = `" "` (blank) | public | my_table | my_schema | my_table |
+
+<Info>
+If the source does not support namespaces, data is written to the destination's default namespace. If the destination does not support namespaces, any namespace preference set on the connection is ignored.
+</Info>
+
+## Requirements
+
+- Both source and destination connectors must support namespaces.
+- Source and destination connectors must be version `0.3.0` or later.
+- Airbyte version `0.21.0-alpha` or later.

@@ -1,0 +1,315 @@
+---
+title: 'abctl'
+description: 'Install and manage local Airbyte instances using abctl, the Airbyte command-line tool.'
+---
+
+abctl is Airbyte's open source command-line tool for creating and managing local Airbyte instances running in Docker.
+
+## How abctl works
+
+Airbyte runs on Kubernetes. abctl makes it easy to run Airbyte on any machine where Docker is running — without needing to set up a Kubernetes cluster yourself.
+
+Internally, abctl uses [kind](https://kind.sigs.k8s.io/) to create a Kubernetes cluster inside a Docker container. It then uses [Helm](https://helm.sh/) to install the latest Airbyte and [NGINX Ingress Controller](https://docs.nginx.com/nginx-ingress-controller/) Helm charts.
+
+<Info>
+Use abctl to run Airbyte on a machine that has Docker but no Kubernetes cluster. For production enterprise deployments with dedicated Kubernetes infrastructure, follow the [Helm on Kubernetes](/deploy/helm-kubernetes) guide instead.
+</Info>
+
+## Prerequisites
+
+Install Docker Desktop on your machine before using abctl:
+
+- [Docker Desktop for Mac](https://docs.docker.com/desktop/install/mac-install/)
+- [Docker Desktop for Windows](https://docs.docker.com/desktop/install/windows-install/)
+- [Docker Desktop for Linux](https://docs.docker.com/desktop/install/linux-install/) — if you are installing on a headless Linux VM, [Docker Engine](https://docs.docker.com/engine/install/) may be easier.
+
+## Install abctl
+
+<Tabs>
+  <Tab title="curl">
+    Open a terminal and run:
+
+    ```bash
+    curl -LsfS https://get.airbyte.com | bash -
+    ```
+
+    Enter your password if prompted. When installation completes, you see `abctl install succeeded`.
+  </Tab>
+  <Tab title="Homebrew">
+    ```bash
+    brew tap airbytehq/tap
+    brew install abctl
+    ```
+
+    To keep abctl up to date:
+
+    ```bash
+    brew upgrade abctl
+    ```
+  </Tab>
+  <Tab title="Go">
+    ```bash
+    go install github.com/airbytehq/abctl@latest
+    ```
+  </Tab>
+  <Tab title="Linux (GitHub release)">
+    <Steps>
+      <Step title="Verify your processor architecture">
+        ```bash
+        uname -m
+        ```
+
+        If the output is `x86_64`, download the **linux-amd64** release. If the output is `aarch64` or similar, download **linux-arm64**.
+      </Step>
+      <Step title="Download and extract the archive">
+        Download the [latest Linux release](https://github.com/airbytehq/abctl/releases/latest), then extract it:
+
+        ```bash
+        tar -xvzf {name-of-file-downloaded.linux-*.tar.gz}
+        ```
+      </Step>
+      <Step title="Make the binary executable">
+        ```bash
+        chmod +x abctl/abctl
+        ```
+      </Step>
+      <Step title="Move abctl to your PATH">
+        ```bash
+        sudo mv abctl /usr/local/bin
+        ```
+      </Step>
+      <Step title="Verify the installation">
+        ```bash
+        abctl version
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+  <Tab title="Windows (GitHub release)">
+    <Steps>
+      <Step title="Verify your processor architecture">
+        Press **Windows + I**, then click **System > About**. Next to **Processor**, if it says `AMD`, download **windows-amd64**. If it says `ARM`, download **windows-arm64**.
+      </Step>
+      <Step title="Download the latest release">
+        Download the [latest Windows release](https://github.com/airbytehq/abctl/releases/latest) and extract the zip file. Copy the folder path.
+      </Step>
+      <Step title="Add abctl to your Path environment variable">
+        Click **Start** and type `environment`. Click **Edit the system environment variables > Environment Variables**. Find the `Path` variable, click **Edit**, then **New**, and paste the folder path. Click **OK** to close all dialogs.
+      </Step>
+      <Step title="Verify the installation">
+        Open a new Command Prompt or PowerShell window and run:
+
+        ```bash
+        abctl version
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+## Install Airbyte
+
+To install Airbyte locally, run:
+
+```bash
+abctl local install
+```
+
+<Note>
+Depending on your internet speed, `abctl local install` may take up to 30 minutes.
+</Note>
+
+You can combine flags to customize the installation. For example, to use a custom values file and a Kubernetes secret:
+
+```bash
+abctl local install --secret YOUR_SECRET --values values.yaml
+```
+
+After installation, Airbyte is accessible at `http://localhost:8000`.
+
+## Manage your Airbyte instance
+
+### Check installation status
+
+```bash
+abctl local status
+```
+
+Example output:
+
+```text
+Existing cluster 'airbyte-abctl' found
+Found helm chart 'airbyte-abctl'
+  Status: deployed
+  Chart Version: 0.422.2
+  App Version: 0.63.15
+Found helm chart 'ingress-nginx'
+  Status: deployed
+  Chart Version: 4.11.1
+  App Version: 1.11.1
+Airbyte should be accessible via http://localhost:8000
+```
+
+### View and update credentials
+
+To view credentials:
+
+```bash
+abctl local credentials
+```
+
+To update credentials:
+
+```bash
+abctl local credentials --email YOUR_EMAIL --password YOUR_PASSWORD
+```
+
+Output:
+
+```json
+{
+  "email": "[YOUR EMAIL]",
+  "password": "[RANDOM PASSWORD]",
+  "client-id": "[RANDOM CLIENT-ID]",
+  "client-secret": "[RANDOM CLIENT-SECRET]"
+}
+```
+
+### Manage Kubernetes deployments
+
+Display Kubernetes deployment information:
+
+```bash
+abctl local deployments
+```
+
+Restart Kubernetes:
+
+```bash
+abctl local deployments --restart
+```
+
+### Uninstall Airbyte
+
+To stop all containers but keep your data:
+
+```bash
+abctl local uninstall
+```
+
+To stop containers and delete all data:
+
+```bash
+abctl local uninstall --persisted
+rm -rf ~/.airbyte/abctl
+```
+
+<Warning>
+The `--persisted` flag permanently deletes all Airbyte data. This cannot be undone.
+</Warning>
+
+## Manage Docker images
+
+To get a manifest of all images used by Airbyte and abctl:
+
+```bash
+abctl images manifest
+```
+
+## Disable telemetry
+
+Set the `DO_NOT_TRACK` environment variable to any value to disable telemetry tracking:
+
+```bash
+export DO_NOT_TRACK=1
+```
+
+## Full command reference
+
+### `abctl local`
+
+Manages the local Airbyte installation.
+
+#### `abctl local install`
+
+Installs a local Airbyte instance or updates an existing one.
+
+| Flag | Default | Description |
+|---|---|---|
+| `--chart` | `""` | Path to a custom Helm chart. |
+| `--chart-version` | latest | Airbyte Helm chart version to install. |
+| `--docker-email` | `""` | Docker email for registry authentication. Also set via `ABCTL_LOCAL_INSTALL_DOCKER_EMAIL`. |
+| `--docker-password` | `""` | Docker password for registry authentication. Also set via `ABCTL_LOCAL_INSTALL_DOCKER_PASSWORD`. |
+| `--docker-server` | `""` | Docker server to authenticate against. Also set via `ABCTL_LOCAL_INSTALL_DOCKER_SERVER`. |
+| `--docker-username` | `""` | Docker username for registry authentication. Also set via `ABCTL_LOCAL_INSTALL_DOCKER_USERNAME`. |
+| `--host` | `""` | FQDN where the Airbyte installation will be accessed. |
+| `--insecure-cookies` | — | Disables secure cookie requirements. Only use with non-HTTPS connections. |
+| `--low-resource-mode` | `false` | Run Airbyte with reduced resource requirements. |
+| `--no-browser` | — | Disables launching the browser when installation completes. |
+| `--port` | `8000` | Port where Airbyte will be accessible. |
+| `--secret` | `""` | Creates a Kubernetes secret from a file. Can be set multiple times. |
+| `--values` | `""` | Helm values file to customize the Airbyte installation. |
+| `--volume` | `""` | Mounts additional volumes in the cluster. Format: `<HOST_PATH>:<GUEST_PATH>`. Can be set multiple times. |
+
+#### `abctl local credentials`
+
+Displays or updates credentials for the local Airbyte installation.
+
+| Flag | Default | Description |
+|---|---|---|
+| `--email` | `""` | Changes the authentication email address. |
+| `--password` | `""` | Changes the authentication password. |
+
+#### `abctl local deployments`
+
+Displays Kubernetes deployment information.
+
+| Flag | Default | Description |
+|---|---|---|
+| `--restart` | `""` | Restarts the specified deployment. |
+
+#### `abctl local status`
+
+Returns information about an existing Airbyte installation.
+
+#### `abctl local uninstall`
+
+Uninstalls the local Airbyte instance. Data is preserved by default.
+
+| Flag | Default | Description |
+|---|---|---|
+| `--persisted` | — | Removes all data for the Airbyte installation. **This cannot be undone.** |
+
+### `abctl images manifest`
+
+Displays a manifest of all images used by Airbyte and abctl.
+
+| Flag | Default | Description |
+|---|---|---|
+| `--chart` | `""` | Path to a custom Helm chart. |
+| `--chart-version` | latest | Airbyte Helm chart version. |
+| `--values` | `""` | Helm values file. |
+
+### `abctl version`
+
+Displays version information about the abctl tool.
+
+```bash
+$ abctl version
+version: v0.19.0
+```
+
+## Using standard Kubernetes tooling with abctl
+
+abctl installs Airbyte into a kind cluster. You can use standard tools like `kubectl` and `helm` to interact with it directly:
+
+```bash
+kubectl --kubeconfig ~/.airbyte/abctl/abctl.kubeconfig \
+  --namespace airbyte-abctl get pods
+```
+
+To load a custom Docker image into the kind cluster:
+
+```bash
+kind load docker-image <image-name>:<image-tag> -n airbyte-abctl
+```

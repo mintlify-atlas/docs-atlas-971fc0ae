@@ -1,0 +1,248 @@
+---
+title: "Pagination"
+description: "Configure offset, page-number, and cursor pagination in Connector Builder."
+---
+
+Pagination is how APIs split large result sets into multiple responses ("pages"). When you enable Pagination in Connector Builder, the connector automatically requests consecutive pages until there are no more results.
+
+If your API doesn't paginate, leave the Pagination section disabled.
+
+## Supported methods
+
+<CardGroup cols={2}>
+  <Card title="Offset Increment" icon="arrow-down-1-9">Uses a `limit` and `offset` parameter. The connector increments the offset by the number of records per page.</Card>
+  <Card title="Page Increment" icon="book-open">Uses a `page_size` and `page` number. The connector increments the page number by 1 after each response.</Card>
+  <Card title="Cursor Pagination" icon="arrow-pointer">Uses an opaque cursor token from the response to fetch the next page.</Card>
+  <Card title="Custom Strategy" icon="code">For APIs with unusual pagination that requires custom Python code.</Card>
+</CardGroup>
+
+## Offset Increment
+
+Look for keywords like `offset` and `limit` in the API docs.
+
+The connector sends requests with increasing offsets until it receives fewer records than the configured limit:
+
+```
+GET /products?limit=2&offset=0  →  [Product A, Product B]
+GET /products?limit=2&offset=2  →  [Product C, Product D]
+GET /products?limit=2&offset=4  →  [Product E]  ← fewer than limit, stop
+```
+
+**Configuration:**
+
+| Field | Value |
+|---|---|
+| Mode | `Offset Increment` |
+| Limit | `100` (use the largest the API allows) |
+| Inject limit into | `request_parameter`, field name `limit` |
+| Inject offset into | `request_parameter`, field name `offset` |
+
+**Advanced options:**
+- **Inject Offset on First Request** — enable if the API requires an explicit `offset=0` on the first request
+- **Interpolated Page Size** — use `{{ config['page_size'] }}` to let users configure the page size
+
+**Example APIs:** [Spotify](https://developer.spotify.com/documentation/web-api/concepts/api-calls#pagination), [GIPHY](https://developers.giphy.com/docs/api/endpoint#trending), [Twilio SendGrid](https://docs.sendgrid.com/api-reference/how-to-use-the-sendgrid-v3-api/responses#pagination)
+
+## Page Increment
+
+Look for keywords like `page_size`, `per_page`, `page_number`, or `page`.
+
+The connector increments the page number by 1 after each request:
+
+```
+GET /products?page_size=3&page=1  →  [A, B, C]
+GET /products?page_size=3&page=2  →  [D, E, F]
+GET /products?page_size=3&page=3  →  []  ← empty, stop
+```
+
+**Configuration:**
+
+| Field | Value |
+|---|---|
+| Mode | `Page Increment` |
+| Page size | `100` |
+| Start from page | `1` (or `0` for zero-based APIs) |
+| Inject page size into | `request_parameter`, field name `page_size` |
+| Inject page number into | `request_parameter`, field name `page` |
+
+**Zero-based vs one-based pagination:**
+
+```
+# Zero-based (Start From Page = 0)
+GET /users?page=0&page_size=50  ← first page
+GET /users?page=1&page_size=50  ← second page
+
+# One-based (Start From Page = 1)
+GET /users?page=1&page_size=50  ← first page
+GET /users?page=2&page_size=50  ← second page
+```
+
+**Example APIs:** [WooCommerce](https://woocommerce.github.io/woocommerce-rest-api-docs/#pagination), [FreshDesk](https://developers.freshdesk.com/api/)
+
+## Cursor Pagination
+
+Look for keywords like `cursor`, `link`, or `next_token`.
+
+With cursor pagination, each response includes a token pointing to the next page. The connector uses this token in the subsequent request:
+
+```json
+// Twitter API response
+{
+  "data": [{...}, {...}],
+  "meta": {
+    "result_count": 100,
+    "next_token": "7140w"
+  }
+}
+```
+
+**Configuration:**
+
+| Field | Value |
+|---|---|
+| Mode | `Cursor Pagination` |
+| Next page cursor | `response`, path: `meta`, `next_token` |
+| Inject cursor into | `request_parameter`, field name `pagination_token` |
+
+**Stop condition templates:**
+
+```
+{{ response.more_results is false }}
+{{ response.pagination.next_cursor is none }}
+{{ not response.data }}
+{{ 'next' not in headers['link'] }}
+```
+
+**Available context variables in cursor templates:**
+- `config` — connector configuration
+- `headers` — response headers (with parsed link header as `headers.link`)
+- `last_page_size` — number of records in the current page
+- `last_record` — the last record from the current page
+- `response` — the full response body
+
+**Real-world examples:**
+
+<Accordion title="GitHub (link header pagination)">
+GitHub returns the full URL for the next page in a `Link` header:
+
+```
+Link: <https://api.github.com/repos/octocat/Hello-World/issues?page=2>; rel="next"
+```
+
+Configuration:
+- **Cursor value:** `{{ headers.link.next.url }}`
+- **Inject into:** Request path (replaces the entire URL)
+- **Stop condition:** `{{ 'next' not in headers['link'] }}`
+</Accordion>
+
+<Accordion title="Stripe (object-based cursor)">
+Stripe uses the ID of the last object as a cursor:
+
+```json
+{"data": [{"id": "cus_123"}, {"id": "cus_456"}], "has_more": true}
+```
+
+Configuration:
+- **Cursor value:** `{{ last_record['id'] }}`
+- **Cursor parameter name:** `starting_after`
+- **Stop condition:** `{{ response.has_more is false }}`
+</Accordion>
+
+<Accordion title="PartnerStack (start_after cursor)">
+PartnerStack uses `starting_after` with a record `key` field:
+
+```
+# Cursor from the last record
+{{ last_records[-1]['key'] }}
+
+# Stop condition
+{{ response.data.has_more is false }}
+```
+</Accordion>
+
+## Custom Pagination Strategy
+
+For APIs with unique pagination that none of the above methods cover, implement a custom Python class:
+
+```python
+# source_myapi/components.py
+from airbyte_cdk.sources.declarative.requesters.paginators.strategies.pagination_strategy import PaginationStrategy
+from dataclasses import dataclass
+from typing import Any, List, Mapping, Optional
+import requests
+
+@dataclass
+class MyCustomPaginationStrategy(PaginationStrategy):
+    page_size: int
+
+    def next_page_token(
+        self,
+        response: requests.Response,
+        last_page_size: int,
+        last_record: Optional[Mapping[str, Any]],
+        last_page_token_value: Optional[Any],
+    ) -> Optional[Any]:
+        # Return None to stop pagination
+        data = response.json()
+        if not data.get("has_next_page"):
+            return None
+        return data["next_page_id"]
+
+    def get_page_size(self) -> Optional[int]:
+        return self.page_size
+
+    def reset(self, value: Optional[Any] = None) -> None:
+        pass
+```
+
+In Connector Builder (YAML mode):
+
+```yaml
+paginator:
+  type: DefaultPaginator
+  pagination_strategy:
+    type: CustomPaginationStrategy
+    class_name: source_myapi.components.MyCustomPaginationStrategy
+    page_size: 100
+```
+
+## Custom parameter injection
+
+For APIs with special requirements (prefix/suffix on values, combined parameters, path injection), disable the standard injection and use the stream's generic parameter section instead.
+
+**Example:** The [Prestashop API](https://devdocs.prestashop-project.org/8/webservice/cheat-sheet/#list-options) requires offset and limit as a single comma-separated query parameter:
+
+```
+?limit=<offset>,<limit_value>
+```
+
+Configure a query parameter `limit` with value:
+```
+{{ next_page_token['next_page_token'] or '0' }},50
+```
+
+## Performance recommendations
+
+1. Use the **largest page size the API allows** to minimize the number of requests
+2. Set a precise **stop condition** to avoid unnecessary calls
+3. Test with small page sizes first (2-5 records) to verify the full pagination cycle quickly
+4. Use `{{ config['page_size'] }}` for configurable page sizes
+
+## Troubleshooting
+
+<Accordion title="Connector keeps paginating indefinitely">
+- Verify your stop condition is correct and evaluates to `true` when there are no more pages
+- Make sure the cursor is extracted from the correct field in the response
+- Check that the API returns different data for each page
+</Accordion>
+
+<Accordion title="Missing records">
+- Check that pagination parameters are injected into the correct location (query param vs header vs body)
+- Verify the page size doesn't exceed the API's maximum
+- Confirm the cursor is extracted from the correct response field
+</Accordion>
+
+<Accordion title="Duplicate records">
+- Verify the pagination method matches what the API expects (offset vs page vs cursor)
+- For cursor pagination, make sure the cursor value uniquely identifies the position in the dataset
+</Accordion>

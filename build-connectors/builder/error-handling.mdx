@@ -1,0 +1,210 @@
+---
+title: "Error Handling"
+description: "Configure retry strategies, backoff, and response filters for your Connector Builder connector."
+---
+
+Error handlers let you control how the connector responds to API errors: retry the request, ignore it, or fail the sync. Configure them per stream in the **Error Handler** section.
+
+<Warning>
+When you use the **Test** button in Connector Builder, failed requests are **not retried**. This keeps test syncs fast. Retries only happen during real syncs.
+</Warning>
+
+## Default behavior
+
+If you don't configure an error handler, the connector retries requests that receive a `429` or `5xx` status code **5 times** using 5-second exponential backoff. This default is appropriate when the API documentation doesn't specify retry behavior.
+
+## Error handler types
+
+<CardGroup cols={3}>
+  <Card title="Default Error Handler" icon="shield">
+    Configure backoff strategy, response filters, and max retries. The right choice for most connectors.
+  </Card>
+  <Card title="Composite Error Handler" icon="layer-group">
+    Chain multiple handlers together. Each is evaluated in sequence until one matches.
+  </Card>
+  <Card title="Custom Error Handler" icon="code">
+    Implement custom Python logic for advanced use cases.
+  </Card>
+</CardGroup>
+
+## Backoff strategies
+
+### Constant
+
+Wait a fixed number of seconds before retrying. Use when the API documentation specifies a fixed wait time.
+
+```
+# Wait 30 seconds between retries
+Backoff time: 30
+
+# Or use a config value
+Backoff time: {{ config['backoff_time'] }}
+```
+
+**Example API:** [Intercom](https://developers.intercom.com/intercom-api-reference/reference/http-responses)
+
+### Exponential
+
+Double the wait time after each retry: `factor × 2ⁿ`. With the default factor of 5, waits are 5s, 10s, 20s, 40s, 80s before stopping.
+
+```
+# Default factor (5 seconds)
+Factor: 5
+
+# Custom factor
+Factor: {{ config['retry_factor'] or 5 }}
+```
+
+**Example APIs:** [Delighted](https://app.delighted.com/docs/api#rate-limits) (recommends 2s base), [PostHog](https://posthog.com/docs/api) (rate limit: 240 req/min)
+
+### Wait time from header
+
+Read the wait time from a response header (typically `Retry-After`).
+
+```
+Response header name: Retry-After
+Extraction regex: ([-+]?\d+)
+Max waiting time: 3600
+```
+
+**Example:** [Chargebee](https://apidocs.chargebee.com/docs/api/error-handling) returns a `Retry-After` header with a value in seconds. If the header is `60`, the connector waits 60 seconds before retrying.
+
+### Wait until time from header
+
+Wait until a specific UTC timestamp from a response header (typically `X-RateLimit-Reset`).
+
+```
+Response header: X-RateLimit-Reset
+Minimum wait time: 10
+Extraction regex: ([-+]?\d+)
+```
+
+**Example:** [Recurly](https://recurly.com/developers/api/v2021-02-25/index.html#section/Getting-Started/Limits) returns a Unix timestamp in `X-RateLimit-Reset`. If a request at 01:00:00 UTC receives a reset time of 02:00:00 UTC, the connector pauses for one hour.
+
+## Response filters
+
+Response filters let you define rules that determine how the connector handles a specific response. Multiple filters on one handler are evaluated in sequence; the first match wins.
+
+### Actions
+
+| Action | Behavior |
+|---|---|
+| `SUCCESS` | Treat the response as successful and emit records |
+| `RETRY` | Retry with the configured backoff strategy |
+| `IGNORE` | Skip this response and continue to the next request |
+| `FAIL` | Stop the sync and report a failure |
+| `RATE_LIMITED` | Trigger rate-limit backoff logic |
+
+### Matching on HTTP status codes
+
+Specify an array of status codes to match:
+
+```
+HTTP codes: [429]
+Action: RATE_LIMITED
+
+HTTP codes: [500, 502, 503, 504]
+Action: RETRY
+
+HTTP codes: [403, 404]
+Action: IGNORE
+```
+
+### Matching on response body text
+
+Match when a string appears anywhere in the response body:
+
+```
+Error message substring: "This API operation is not enabled for this site"
+Action: IGNORE
+```
+
+**Example:** The Chargebee API returns this message for endpoints unavailable in the configured API version.
+
+### Matching on predicates
+
+For finer-grained matching, use a Jinja expression:
+
+```
+# Match a specific JSON field value
+{{ response.code == 300 }}
+
+# Match text in the body
+{{ 'Too many requests' in response }}
+
+# Complex condition
+{{ 'error_code' in response and response['error_code'] == 'ComplexityException' }}
+```
+
+**Example:** The Zoom API uses non-standard codes in the body (`{"code": 300}`). A status-code filter would be too broad; a predicate targets the exact condition.
+
+### Custom error messages
+
+Set a human-readable error message shown when a filter matches. Supports interpolation:
+
+```
+"Invalid API key: {{ response.error_message }}"
+"Request failed with status {{ response.status_code }}: {{ response.message }}"
+```
+
+**Interpolation context:** `config`, `response`, `headers`
+
+### Failure types
+
+When using the `FAIL` action, optionally specify why:
+
+| Type | Meaning |
+|---|---|
+| `system_error` | A problem on Airbyte's or the API's side |
+| `config_error` | Incorrect user configuration (e.g. wrong API key) |
+| `transient_error` | Temporary problem that may resolve on its own |
+
+## Common patterns
+
+<Accordion title="Rate limiting">
+1. Configure response filter: HTTP codes `[429]`, action `RATE_LIMITED`
+2. Add backoff strategy: **Wait time from header** using `Retry-After`, or **Exponential** if no header
+3. Set max retries: 5-10
+</Accordion>
+
+<Accordion title="Server errors">
+1. Configure response filter: HTTP codes `[500, 502, 503, 504]`, action `RETRY`
+2. Backoff strategy: Exponential (gives the server time to recover)
+3. Max retries: 3-5
+</Accordion>
+
+<Accordion title="Known API-specific errors">
+Use `IGNORE` for expected errors that should not stop the sync:
+```
+Error message substring: "No data available for this period"
+Action: IGNORE
+```
+
+Use `FAIL` with `config_error` for bad credentials:
+```
+HTTP codes: [401]
+Action: FAIL
+Failure type: config_error
+Error message: "Invalid API key. Please check your credentials."
+```
+</Accordion>
+
+<Accordion title="Composite handler example">
+Chain handlers for different failure modes:
+
+1. **First handler:** Match `429`, action `RATE_LIMITED`, backoff from `Retry-After` header
+2. **Second handler:** Match `[500, 503]`, action `RETRY`, exponential backoff, max 3 retries
+3. **Third handler:** Default — fail for anything else
+</Accordion>
+
+## Max retry count
+
+Set **Max retry count** to control how many times a retryable request is attempted before the sync fails. Default is `5`. Set to `0` to disable retries entirely.
+
+## Custom error handler
+
+For logic that can't be expressed through configuration:
+
+1. Implement a class that satisfies the error handler interface
+2. Set **Class name** to the fully qualified class name: `source_myapi.components.MyCustomErrorHandler`
+3. Switch to YAML mode to configure the handler

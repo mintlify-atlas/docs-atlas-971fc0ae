@@ -1,0 +1,86 @@
+---
+title: 'Managing connector updates'
+description: 'Understand connector versioning, how Airbyte handles updates, and what actions to take when a new connector version is released.'
+---
+
+While maintaining an Airbyte instance, you will need to manage connector updates. Updates introduce bug fixes, new features, and changes that affect compatibility as APIs and databases evolve. This guide explains connector versioning, how Airbyte applies updates on different plans, and what actions you may need to take.
+
+## Connector versioning
+
+Connectors in Airbyte's catalog generally follow [semantic versioning](https://semver.org/) — Major.Minor.Patch (for example, `1.2.5`).
+
+A connector reaching version `1.0` is considered mature and comes with semver guarantees:
+
+| Version type | Examples | Description |
+|---|---|---|
+| Patch (`1.0.x`) | `1.0.1`, `1.0.2` | Bug fixes and small improvements. Will not affect your existing configurations. |
+| Minor (`1.x.0`) | `1.1.0`, `1.2.0` | New features such as new streams or properties. Fully backward compatible with existing setups. |
+| Major (`x.0.0`) | `2.0.0`, `3.0.0` | Significant changes that may require your review. May affect your schema or sync success. |
+
+Each connector's changelog is available in the [connector catalog](/connectors/connector-catalog) at the end of each connector's entry.
+
+## How Airbyte applies connector updates
+
+### Airbyte Cloud
+
+**Minor and patch versions** are applied automatically and immediately. No action is needed.
+
+**Major versions** include notable changes that may affect your schema or sync success. Airbyte notifies you ahead of time and gives you a window to prepare. At the end of the window, Airbyte automatically upgrades your connector to ensure you receive the latest updates.
+
+See the [breaking change documentation](/using-airbyte/schema-change-management#major-connector-version-upgrades) for examples of major version changes.
+
+### Self-managed plans
+
+All connector updates — major, minor, and patch — are opt-in on self-managed deployments. You will see a badge in the sidebar indicating available updates.
+
+**Minor and patch versions:** Once you opt in, the update applies immediately and globally to all connectors of that type in your instance.
+
+**Major versions** require a two-step opt-in process:
+
+<Steps>
+  <Step title="Opt in to the update on the settings page">
+    Navigate to **Settings** and find the connector with a pending major version update. Opt in to the update.
+  </Step>
+  <Step title="Apply the update per connection">
+    While there is an option to upgrade all connections at once, Airbyte recommends accepting the update for each individual connection using the affected connector. This allows you to review and potentially adjust connection settings before applying the update.
+  </Step>
+</Steps>
+
+<Tip>
+When new major versions are released, update promptly to avoid potential compatibility issues as source or destination APIs change.
+</Tip>
+
+## Actions to take for different update types
+
+### Patch and minor updates
+
+For self-managed deployments:
+
+1. Navigate to **Settings > Sources** or **Settings > Destinations**.
+2. Find connectors with available updates (indicated by a badge).
+3. Click the update option. The update applies globally to all connections using that connector.
+
+### Major updates
+
+Major updates may introduce breaking changes such as:
+
+- Changed stream schemas (added, removed, or renamed fields)
+- Changed sync behavior
+- Required new configuration fields
+
+For self-managed deployments, Airbyte recommends reviewing each affected connection individually before applying a major update:
+
+1. Review the connector's changelog to understand what changed.
+2. Check whether your connection configurations or downstream consumers depend on any changed fields.
+3. Opt in to the update on the settings page.
+4. Apply the update to each connection individually and verify sync behavior.
+
+<Warning>
+Applying a major connector update may cause schema changes that break downstream pipelines or dashboards that depend on specific field names or data types. Always review the changelog before upgrading.
+</Warning>
+
+## Keeping Airbyte up to date
+
+Airbyte recommends running the latest version of the platform when updating connectors. Newer platform versions may include improvements to how connector updates are handled and applied.
+
+For instructions on upgrading the Airbyte platform itself, see the operator guide on upgrading Airbyte.

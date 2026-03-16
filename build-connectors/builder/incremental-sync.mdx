@@ -1,0 +1,136 @@
+---
+title: "Incremental Sync"
+description: "Sync only new or updated records using datetime cursors in Connector Builder."
+---
+
+An incremental sync only pulls data that has changed since the previous sync, rather than re-fetching everything. This is important when you have large volumes of data or APIs with tight rate limits.
+
+Incremental sync works by tracking a **cursor value** — typically an `updated_at` timestamp — that marks where the last sync ended. The next sync picks up from that cursor value.
+
+## API requirements
+
+To support incremental sync, the API must:
+
+1. Include a top-level date/time field in each record that indicates when it was last updated (the "cursor field")
+2. Accept filter parameters to request only records after a given date
+
+<Tip>
+If the cursor field is nested, use an **Add Field** transformation to copy it to the top level, then a **Remove Field** transformation to delete the original. This effectively moves it.
+</Tip>
+
+## Configuration
+
+Configure incremental sync in the stream's **Incremental sync** section:
+
+| Field | Description |
+|---|---|
+| Cursor field | The record property that indicates when the record was last updated |
+| Cursor datetime formats | Ordered list of formats to try when parsing the cursor value |
+| Start datetime | The initial cutoff date for the first sync |
+| End datetime | Upper bound (usually `{{ now_utc() }}` to sync through the present) |
+| Inject start time | How to send the start datetime to the API |
+| Inject end time | How to send the end datetime to the API |
+
+### Cursor datetime formats
+
+Specify formats in order of preference. The first one that parses the cursor value successfully is used:
+
+| Format | Example |
+|---|---|
+| `%Y-%m-%dT%H:%M:%S.%f%z` | `2023-04-15T07:30:58.000000+00:00` |
+| `%Y-%m-%dT%H:%M:%SZ` | `2023-04-15T07:30:58Z` |
+| `%Y-%m-%d` | `2023-04-15` |
+| `%s` | `1681543858` (Unix seconds) |
+| `%ms` | `1681543858000` (Unix milliseconds) |
+
+Connector Builder can auto-detect common formats from your test data. If a new format is detected during testing, it will suggest adding it.
+
+## Example: The Guardian API
+
+The [Guardian API](https://open-platform.theguardian.com/documentation/search) `/search` endpoint accepts `from-date` and `to-date` query parameters. Content records have a `webPublicationDate` field:
+
+```json
+{
+  "id": "world/2022/oct/21/russia-ukraine-war",
+  "type": "article",
+  "webPublicationDate": "2022-10-21T14:06:14Z",
+  "webTitle": "Russia-Ukraine war latest..."
+}
+```
+
+Configuration:
+
+| Field | Value |
+|---|---|
+| Cursor field | `webPublicationDate` |
+| Cursor datetime formats | `%Y-%m-%dT%H:%M:%SZ` |
+| Start datetime | `{{ config['start_time'] }}` |
+| End datetime | `{{ now_utc().strftime('%Y-%m-%dT%H:%M:%SZ') }}` |
+| Inject start time into | `request_parameter`, field `from-date` |
+| Inject end time into | `request_parameter`, field `to-date` |
+
+First sync (start date `2023-04-09T00:00:00Z`):
+
+```bash
+curl 'https://content.guardianapis.com/search?from-date=2023-04-09T00:00:00Z&to-date=<now>'
+```
+
+After the sync, the most recent `webPublicationDate` seen (e.g. `2023-04-15T07:30:58Z`) is stored as state. The next sync picks up from there:
+
+```bash
+curl 'https://content.guardianapis.com/search?from-date=2023-04-15T07:30:58Z&to-date=<now>'
+```
+
+## Advanced settings
+
+### Outgoing datetime format
+
+The **Outgoing datetime format** controls how datetime values are formatted when sent to the API. If not set, the first cursor format is used. Common values:
+
+| Format | Output |
+|---|---|
+| `%s` | `1686218963` |
+| `%ms` | `1686218963123` |
+| `%Y-%m-%dT%H:%M:%SZ` | `2023-06-08T12:09:23Z` |
+| `%Y-%m-%d` | `2023-06-08` |
+
+### Step and cursor granularity
+
+For large time ranges, split the sync into intervals using **Step** and **Cursor granularity**:
+
+- **Step** — the length of each interval (ISO 8601 duration, e.g. `P10D` for 10 days)
+- **Cursor granularity** — the smallest time unit the API supports (e.g. `PT1S` for 1 second)
+
+With step `P10D` and granularity `PT1S`, a 30-day range becomes three requests:
+
+```bash
+curl '...?from-date=2023-01-01T00:00:00Z&to-date=2023-01-09T23:59:59Z'
+curl '...?from-date=2023-01-10T00:00:00Z&to-date=2023-01-19T23:59:59Z'
+curl '...?from-date=2023-01-20T00:00:00Z&to-date=2023-01-29T23:59:59Z'
+```
+
+State is checkpointed after each interval, so a failure only requires re-syncing one interval. A good starting point is a step of one month.
+
+### Lookback window
+
+Some APIs allow filtering by creation date only, not modification date. If records can be updated after creation without changing the cursor field, configure a **Lookback window** (ISO 8601 duration).
+
+With a 2-day lookback, if the last seen record had `webPublicationDate: 2023-04-15T07:30:58Z`, the next sync starts from `2023-04-13T07:30:58Z` — two days earlier — to catch any updates to recently published articles.
+
+## Custom parameter injection
+
+The standard injection options work for most APIs. For special requirements (combined parameters, URL path injection, conditional logic), disable injection in the incremental sync form and use the stream's generic parameter section.
+
+**Example:** The [Sendgrid API](https://docs.sendgrid.com/api-reference/e-mail-activity/filter-all-messages) requires start and end time in a single `query` parameter:
+
+Configure a query parameter `query` with value:
+```
+last_event_time BETWEEN TIMESTAMP "{{stream_interval.start_time}}" AND TIMESTAMP "{{stream_interval.end_time}}"
+```
+
+## Sync modes
+
+Incremental sync in Connector Builder enables two Airbyte sync modes:
+
+- [Incremental Append](/using-airbyte/sync-modes) — new records are appended to the destination
+- [Incremental Append + Deduped](/using-airbyte/sync-modes) — records are upserted based on the primary key

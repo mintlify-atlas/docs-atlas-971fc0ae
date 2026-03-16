@@ -1,0 +1,155 @@
+---
+title: 'Deploy on AWS'
+description: 'Infrastructure guidance and IAM policies for deploying Airbyte on Amazon Web Services.'
+---
+
+Airbyte supports Amazon Web Services as a cloud provider. You can deploy Airbyte on:
+
+- **Amazon EKS** — the AWS managed Kubernetes service
+- **EC2 with abctl** — run `abctl` on an EC2 instance
+- **EC2 with self-managed Kubernetes** — run a Kubernetes distribution on EC2 instances
+
+## Infrastructure overview
+
+For a production-ready deployment, Airbyte recommends running all components in the same VPC:
+
+| Component | Recommendation |
+|---|---|
+| Kubernetes cluster | Amazon EKS running on EC2 instances in 2 or more availability zones, minimum 6 nodes |
+| Ingress | Amazon ALB with a URL for users to access the Airbyte UI or make API requests |
+| Object storage | Amazon S3 bucket with directories for log and state storage |
+| Database | Amazon RDS PostgreSQL with at least one read replica |
+| Secrets manager | AWS Secrets Manager for storing connector secrets |
+
+<Info>
+Airbyte recommends running on memory-optimized instances, such as M7i or M7g instance types, with at least 2 cores and 8 GB of RAM per node. EKS on Fargate is **not** supported.
+</Info>
+
+## IAM policies
+
+Create an AWS IAM Role and associate it with an AWS user (for access key credentials) or an instance profile/Kubernetes Service Account (for IAM Roles for Service Accounts). The role needs the following policies based on which AWS services you integrate with.
+
+### S3 policy
+
+The following policy allows the cluster to communicate with S3 for log and state storage:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "s3:ListAllMyBuckets",
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["s3:ListBucket", "s3:GetBucketLocation"],
+      "Resource": "arn:aws:s3:::YOUR-S3-BUCKET-NAME"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:PutObjectAcl",
+        "s3:GetObject",
+        "s3:GetObjectAcl",
+        "s3:DeleteObject"
+      ],
+      "Resource": "arn:aws:s3:::YOUR-S3-BUCKET-NAME/*"
+    }
+  ]
+}
+```
+
+### AWS Secrets Manager policy
+
+The following policy allows the cluster to communicate with AWS Secrets Manager for connector secret storage:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:CreateSecret",
+        "secretsmanager:ListSecrets",
+        "secretsmanager:DescribeSecret",
+        "secretsmanager:TagResource",
+        "secretsmanager:UpdateSecret"
+      ],
+      "Resource": ["*"],
+      "Condition": {
+        "ForAllValues:StringEquals": {
+          "secretsmanager:ResourceTag/AirbyteManaged": "true"
+        }
+      }
+    }
+  ]
+}
+```
+
+## Configure kubectl for EKS
+
+<Steps>
+  <Step title="Configure the AWS CLI">
+    Follow the [AWS CLI configuration guide](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html) to connect to your project.
+  </Step>
+  <Step title="Install eksctl">
+    Install [eksctl](https://eksctl.io/introduction/) for EKS cluster management.
+  </Step>
+  <Step title="Write the kubeconfig">
+    ```bash
+    eksctl utils write-kubeconfig --cluster=$CLUSTER_NAME
+    ```
+  </Step>
+  <Step title="Select the EKS context">
+    ```bash
+    kubectl config get-contexts
+    kubectl config use-context $EKS_CONTEXT
+    ```
+  </Step>
+</Steps>
+
+## Configure S3 storage in values.yaml
+
+After setting up your IAM policies and Kubernetes secrets, configure Airbyte to use S3 in your `values.yaml` file:
+
+```yaml
+global:
+  storage:
+    type: s3
+    storageSecretName: airbyte-config-secrets
+    bucket:
+      log: airbyte-bucket
+      state: airbyte-bucket
+      workloadOutput: airbyte-bucket
+    s3:
+      region: us-east-1
+      authenticationType: credentials # or instanceProfile
+```
+
+Set `authenticationType` to `instanceProfile` if your EKS cluster has an IAM role with the required permissions pre-assigned.
+
+## Configure AWS Secrets Manager in values.yaml
+
+```yaml
+secretManager:
+  type: awsSecretManager
+  awsSecretManager:
+    region: us-east-1
+    authenticationType: credentials # or instanceProfile
+    tags:
+      - key: team
+        value: deployments
+    kms: # Optional ARN for KMS decryption
+```
+
+## Next steps
+
+After setting up your AWS infrastructure and IAM policies:
+
+1. [Create your Kubernetes secrets](/deploy/secrets)
+2. [Install Airbyte with Helm](/deploy/helm-kubernetes)

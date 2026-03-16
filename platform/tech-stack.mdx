@@ -1,0 +1,65 @@
+---
+title: "Tech Stack"
+description: "The technologies that power the Airbyte platform"
+---
+
+# Technology stack
+
+## Core backend
+
+Airbyte's platform services are built with:
+
+- **Language:** Java 21
+- **Framework:** [Micronaut](https://micronaut.io/)
+- **API:** OpenAPI Specification 3 (OAS3)
+- **Database:** PostgreSQL
+- **Testing:** JUnit 5
+- **Orchestration:** [Temporal](https://temporal.io)
+
+## Connectors
+
+Connectors can be written in any language. The most commonly used languages are:
+
+<CardGroup cols={2}>
+  <Card title="Python" icon="python">
+    Python 3.9+ is the primary language for source connectors, especially REST APIs. The Python CDK provides abstractions for common patterns like pagination, authentication, and incremental sync.
+  </Card>
+  <Card title="Java" icon="java">
+    Java 21 is used for destination connectors and database sources. JDBC makes writing reusable database connector frameworks straightforward.
+  </Card>
+</CardGroup>
+
+## Frontend
+
+- **Runtime:** Node.js
+- **Language:** TypeScript
+- **Framework:** React
+- **Linter:** ESLint
+- **Formatter:** Prettier
+
+## Infrastructure & tooling
+
+- **CI/CD:** GitHub Actions
+- **Containerization:** Docker and Docker Compose
+- **Deployment:** Kubernetes + Helm
+- **Backend formatter:** Spotless
+
+## Frequently asked questions
+
+<AccordionGroup>
+  <Accordion title="Why are most REST API connectors written in Python?">
+    Most contributors felt comfortable writing in Python, so the team created a [Python CDK](/build-connectors/python-cdk) to accelerate connector development. You can write a connector from scratch in any language as long as it implements the [Airbyte Protocol](/platform/airbyte-protocol).
+  </Accordion>
+
+  <Accordion title="Why are destination/database connectors often written in Java?">
+    JDBC makes writing reusable database connector frameworks fairly easy, saving development time. Java's mature ecosystem for database connectivity and its strong type system makes it well suited for this use case.
+  </Accordion>
+
+  <Accordion title="Why does Airbyte use Temporal for orchestration?">
+    Temporal solves two major challenges in orchestrating thousands of simultaneous jobs: scaling state management and proper queue management. Temporal achieves this by serializing job runtime state to a database, making it trivial to recover from failures and ensuring jobs are assigned correctly.
+  </Accordion>
+
+  <Accordion title="Why was the server built with Java and Micronaut?">
+    The core Airbyte team has more experience writing production Java code. Micronaut provides a lightweight, fast startup framework with compile-time dependency injection.
+  </Accordion>
+</AccordionGroup>

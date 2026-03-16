@@ -1,0 +1,477 @@
+---
+title: 'Enterprise implementation guide'
+description: 'Step-by-step instructions to install and configure Airbyte Self-Managed Enterprise on Kubernetes using Helm.'
+---
+
+This guide assumes you have already completed the [Self-Managed Enterprise setup prerequisites](/deploy/enterprise-setup), including provisioning infrastructure and creating Kubernetes secrets.
+
+<Note>
+Airbyte recommends using Helm chart V2 for all new deployments. V2 will become mandatory in the future.
+</Note>
+
+## Step 1: Add the Airbyte Helm repository
+
+<Steps>
+  <Step title="Add the repository">
+    ```bash
+    helm repo add airbyte https://airbytehq.github.io/helm-charts
+    ```
+  </Step>
+  <Step title="Update the repository index">
+    ```bash
+    helm repo update
+    ```
+  </Step>
+  <Step title="Verify available charts">
+    ```bash
+    helm search repo airbyte
+    ```
+  </Step>
+</Steps>
+
+## Step 2: Configure your deployment
+
+Create an empty `values.yaml` file and build it up with the required configuration.
+
+### Set the Enterprise edition
+
+```yaml
+global:
+  edition: enterprise
+```
+
+### Configure SSO authentication
+
+Add instance admin details and identity provider configuration under `global.auth`:
+
+<Tabs>
+  <Tab title="Helm chart V1">
+    ```yaml
+    global:
+      auth:
+        instanceAdmin:
+          firstName: Jane
+          lastName: Smith
+        identityProvider:
+          type: oidc
+          secretName: airbyte-config-secrets
+          oidc:
+            domain: company.example
+            appName: airbyte
+            display-name: Company SSO
+            clientIdSecretKey: client-id
+            clientSecretSecretKey: client-secret
+    ```
+  </Tab>
+  <Tab title="Helm chart V2 (OIDC)">
+    ```yaml
+    global:
+      auth:
+        instanceAdmin:
+          firstName: ""
+          lastName: ""
+          emailSecretKey: ""
+          passwordSecretKey: ""
+        identityProvider:
+          secretName: ""
+          type: oidc
+          oidc:
+            domain: ""
+            appName: ""
+            clientIdSecretKey: ""
+            clientSecretSecretKey: ""
+    ```
+  </Tab>
+  <Tab title="Helm chart V2 (generic OIDC)">
+    ```yaml
+    global:
+      auth:
+        instanceAdmin:
+          firstName: ""
+          lastName: ""
+          emailSecretKey: ""
+          passwordSecretKey: ""
+        identityProvider:
+          secretName: ""
+          type: generic-oidc
+          genericOidc:
+            clientId: ""
+            audience: ""
+            extraScopes: ""
+            issuer: ""
+            endpoints:
+              authorizationServerEndpoint: ""
+              jwksEndpoint: ""
+            fields:
+              subject: sub
+              email: email
+              name: name
+              issuer: iss
+    ```
+  </Tab>
+</Tabs>
+
+### Set the Airbyte URL
+
+```yaml
+global:
+  airbyteUrl: https://airbyte.company.example
+```
+
+### Configure an external database
+
+Do not use the default internal PostgreSQL (`airbyte/db`) for production. Use a dedicated instance such as AWS RDS or GCP Cloud SQL:
+
+<Tabs>
+  <Tab title="Helm chart V1">
+    ```yaml
+    postgresql:
+      enabled: false
+
+    global:
+      database:
+        secretName: airbyte-config-secrets
+        host: database.internal
+        port: "5432"
+        database: airbyte
+        user: airbyte
+        passwordSecretKey: database-password
+    ```
+  </Tab>
+  <Tab title="Helm chart V2">
+    ```yaml
+    postgresql:
+      enabled: false
+
+    global:
+      database:
+        secretName: airbyte-config-secrets
+        host: database.internal
+        port: 5432
+        name: airbyte
+        userSecretKey: database-user
+        passwordSecretKey: database-password
+    ```
+  </Tab>
+</Tabs>
+
+### Configure external log storage
+
+Do not use the default internal MinIO for production. Use S3, GCS, or Azure Blob Storage:
+
+<Tabs>
+  <Tab title="S3">
+    ```yaml
+    global:
+      storage:
+        type: S3
+        storageSecretName: airbyte-config-secrets
+        bucket:
+          log: airbyte-bucket
+          state: airbyte-bucket
+          workloadOutput: airbyte-bucket
+        s3:
+          region: us-east-1
+          authenticationType: credentials # or instanceProfile
+    ```
+  </Tab>
+  <Tab title="GCS">
+    ```yaml
+    global:
+      storage:
+        type: GCS
+        storageSecretName: airbyte-config-secrets
+        bucket:
+          log: airbyte-bucket
+          state: airbyte-bucket
+          workloadOutput: airbyte-bucket
+        gcs:
+          projectId: my-project-id
+    ```
+  </Tab>
+  <Tab title="Azure Blob">
+    ```yaml
+    global:
+      storage:
+        type: Azure
+        storageSecretName: airbyte-config-secrets
+        bucket:
+          log: airbyte-bucket
+          state: airbyte-bucket
+          workloadOutput: airbyte-bucket
+        azure:
+          connectionStringSecretKey: azure-blob-store-connection-string
+    ```
+  </Tab>
+</Tabs>
+
+### Configure external connector secret management
+
+<Warning>
+Modifying connector secret storage configuration after initial deployment will cause all existing connectors to fail. You will need to recreate them.
+</Warning>
+
+<Tabs>
+  <Tab title="AWS Secrets Manager">
+    ```yaml
+    secretsManager:
+      type: awsSecretManager
+      awsSecretManager:
+        region: us-east-1
+        authenticationType: credentials # or instanceProfile
+        tags:
+          - key: team
+            value: deployments
+        kms: # Optional ARN for KMS decryption
+    ```
+  </Tab>
+  <Tab title="GCP Secret Manager">
+    ```yaml
+    secretsManager:
+      type: googleSecretManager
+      storageSecretName: gcp-cred-secrets
+      googleSecretManager:
+        projectId: my-project-id
+        credentialsSecretKey: gcp.json
+    ```
+  </Tab>
+  <Tab title="Azure Key Vault">
+    ```yaml
+    global:
+      secretsManager:
+        type: azureKeyVault
+        azureKeyVault:
+          vaultUrl: https://my-vault.vault.azure.net/
+          tenantId: 3fc863e9-4740-4871-bdd4-456903a04d4e
+    ```
+  </Tab>
+</Tabs>
+
+### Configure ingress
+
+You must have an ingress controller deployed in your cluster before enabling ingress. See [NGINX](https://kubernetes.github.io/ingress-nginx/deploy/) or [AWS ALB](https://docs.aws.amazon.com/eks/latest/userguide/alb-ingress.html) controller documentation.
+
+<Tabs>
+  <Tab title="Helm chart ingress (recommended)">
+    ```yaml
+    ingress:
+      enabled: true
+      className: nginx
+      annotations: {}
+      hosts:
+        - host: airbyte.example.com
+          paths:
+            - path: /auth
+              pathType: Prefix
+              backend: keycloak
+            - path: /
+              pathType: Prefix
+              backend: server
+            - path: /connector-builder
+              pathType: Prefix
+              backend: connector-builder-server
+      tls: []
+    ```
+  </Tab>
+  <Tab title="NGINX (manual)">
+    ```yaml
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: enterprise-airbyte-ingress
+      annotations:
+        nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    spec:
+      ingressClassName: nginx
+      rules:
+        - host: airbyte.example.com
+          http:
+            paths:
+              - backend:
+                  service:
+                    name: airbyte-enterprise-airbyte-keycloak-svc
+                    port:
+                      number: 8180
+                path: /auth
+                pathType: Prefix
+              - backend:
+                  service:
+                    name: airbyte-enterprise-airbyte-connector-builder-server-svc
+                    port:
+                      number: 80
+                path: /api/v1/connector_builder/
+                pathType: Prefix
+              - backend:
+                  service:
+                    name: airbyte-enterprise-airbyte-server-svc
+                    port:
+                      number: 8001
+                path: /
+                pathType: Prefix
+    ```
+  </Tab>
+  <Tab title="AWS ALB">
+    ```yaml
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: airbyte-ingress
+      annotations:
+        kubernetes.io/ingress.class: alb
+        alb.ingress.kubernetes.io/ssl-redirect: "443"
+        alb.ingress.kubernetes.io/scheme: internal
+        alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:123456789:certificate/your-cert-arn
+        alb.ingress.kubernetes.io/load-balancer-attributes: idle_timeout.timeout_seconds=30
+    spec:
+      rules:
+        - host: airbyte.example.com
+          http:
+            paths:
+              - backend:
+                  service:
+                    name: airbyte-enterprise-airbyte-keycloak-svc
+                    port:
+                      number: 8180
+                path: /auth
+                pathType: Prefix
+              - backend:
+                  service:
+                    name: airbyte-enterprise-airbyte-connector-builder-server-svc
+                    port:
+                      number: 80
+                path: /api/v1/connector_builder/
+                pathType: Prefix
+              - backend:
+                  service:
+                    name: airbyte-enterprise-airbyte-server-svc
+                    port:
+                      number: 8001
+                path: /
+                pathType: Prefix
+    ```
+  </Tab>
+</Tabs>
+
+After configuring ingress, ensure `global.airbyteUrl` matches the ingress host:
+
+```yaml
+global:
+  airbyteUrl: https://airbyte.example.com
+```
+
+## Step 3: Deploy Self-Managed Enterprise
+
+<Tabs>
+  <Tab title="Helm chart V2 (recommended)">
+    Find the chart version corresponding to the Airbyte version you want:
+
+    ```bash
+    helm search repo airbyte-v2 --versions
+    ```
+
+    Then install:
+
+    ```bash
+    helm install airbyte airbyte-v2/airbyte \
+      --namespace airbyte-v2 \
+      --values ./values.yaml \
+      --version 2.0.18
+    ```
+  </Tab>
+  <Tab title="Helm chart V1">
+    ```bash
+    helm install airbyte-enterprise airbyte/airbyte \
+      --namespace airbyte \
+      --values ./values.yaml
+    ```
+  </Tab>
+</Tabs>
+
+To uninstall:
+
+```bash
+helm uninstall airbyte-enterprise
+```
+
+## Upgrade Self-Managed Enterprise
+
+<Steps>
+  <Step title="Update the Helm repo">
+    ```bash
+    helm repo update
+    ```
+  </Step>
+  <Step title="Run helm upgrade">
+    <Tabs>
+      <Tab title="Helm chart V2">
+        ```bash
+        helm upgrade airbyte airbyte-v2/airbyte \
+          --namespace airbyte-v2 \
+          --values ./values.yaml \
+          --version 2.x.x
+        ```
+      </Tab>
+      <Tab title="Helm chart V1">
+        ```bash
+        helm upgrade airbyte-enterprise airbyte/airbyte \
+          --namespace airbyte \
+          --values ./values.yaml
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+</Steps>
+
+## Use a custom image registry
+
+To pull Docker images from a private registry instead of Docker Hub, configure the `global.image.registry` field in your `values.yaml`:
+
+```yaml
+global:
+  image:
+    registry: ghcr.io/YOUR_NAMESPACE
+```
+
+If your registry requires authentication, create a Kubernetes secret and reference it:
+
+```bash
+kubectl create secret generic regcred \
+  --from-file=.dockerconfigjson=<path/to/.docker/config.json> \
+  --type=kubernetes.io/dockerconfigjson
+```
+
+```yaml
+global:
+  image:
+    registry: ghcr.io/YOUR_NAMESPACE
+  imagePullSecrets:
+    - name: regcred
+```
+
+To get a list of all Airbyte images for the current version:
+
+```bash
+abctl images manifest
+```
+
+Tag and push all platform images to your registry:
+
+```bash
+abctl images manifest | xargs -L1 -I{} sh -c \
+  'docker tag {} ghcr.io/NAMESPACE/{} && docker push ghcr.io/NAMESPACE/{}'
+```
+
+## Use a custom service account
+
+To use your own Kubernetes service account instead of the Airbyte default:
+
+```yaml
+serviceAccount:
+  name: my-service-account
+```
+
+## Additional customization
+
+- [Multiple region deployments](/deploy/enterprise-implementation#multiple-regions)
+- [Audit logging configuration](/deploy/enterprise-implementation#audit-logs)
+- [Scaling Airbyte](/deploy/enterprise-implementation#scaling)

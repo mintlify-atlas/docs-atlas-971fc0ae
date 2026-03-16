@@ -1,0 +1,297 @@
+---
+title: "Python CDK"
+description: "Build fully custom source and destination connectors using the Airbyte Python CDK."
+---
+
+The Python CDK gives you the most flexibility when building Airbyte connectors. Use it when your source isn't an HTTP API, when you need custom authentication logic that the declarative framework can't express, or when you're building a destination connector.
+
+## Airbyte protocol operations
+
+Every Airbyte connector must support four operations:
+
+| Operation | Description |
+|---|---|
+| `Spec` | Return the JSON Schema for required user configuration (e.g. credentials, host) |
+| `Check` | Validate that the provided config is correct and has sufficient permissions |
+| `Discover` | Return the catalog of streams (tables) the source can provide |
+| `Read` | Perform the actual sync and emit `AirbyteRecordMessage` objects |
+
+The Python CDK handles the protocol plumbing. You implement the business logic.
+
+## Core classes
+
+### `AbstractSource`
+
+`AbstractSource` is the main entry point for building a source connector. You implement two methods:
+
+```python
+from airbyte_cdk.sources import AbstractSource
+from airbyte_cdk.sources.streams import Stream
+from typing import Iterator, List, Mapping, Any, Tuple
+
+class SourceMyAPI(AbstractSource):
+    def check_connection(self, logger, config) -> Tuple[bool, Any]:
+        """Validate that the config is correct and the API is reachable."""
+        try:
+            # Make a lightweight request to verify credentials
+            response = requests.get(
+                "https://api.example.com/me",
+                headers={"Authorization": f"Bearer {config['api_token']}"}
+            )
+            response.raise_for_status()
+            return True, None
+        except Exception as e:
+            return False, str(e)
+
+    def streams(self, config: Mapping[str, Any]) -> List[Stream]:
+        """Return all streams this source supports."""
+        auth = TokenAuthenticator(token=config["api_token"])
+        return [
+            Employees(authenticator=auth),
+            Departments(authenticator=auth),
+        ]
+```
+
+### `HttpStream`
+
+`HttpStream` is the base class for API-backed streams. Implement four things:
+
+```python
+from airbyte_cdk.sources.streams.http import HttpStream
+from typing import Any, Iterable, Mapping, MutableMapping, Optional
+import requests
+
+class Employees(HttpStream):
+    url_base = "https://api.example.com"
+    primary_key = "id"
+
+    def path(self, **kwargs) -> str:
+        return "/employees"
+
+    def parse_response(
+        self,
+        response: requests.Response,
+        **kwargs,
+    ) -> Iterable[Mapping]:
+        """Extract records from the response."""
+        yield from response.json()["data"]
+
+    def next_page_token(
+        self, response: requests.Response
+    ) -> Optional[Mapping[str, Any]]:
+        """Return None when there are no more pages."""
+        data = response.json()
+        if data.get("next_cursor"):
+            return {"cursor": data["next_cursor"]}
+        return None
+
+    def request_params(
+        self,
+        next_page_token: Optional[Mapping[str, Any]] = None,
+        **kwargs,
+    ) -> MutableMapping[str, Any]:
+        params = {"limit": 100}
+        if next_page_token:
+            params["cursor"] = next_page_token["cursor"]
+        return params
+```
+
+## Authentication
+
+The CDK includes built-in authenticators:
+
+```python
+from airbyte_cdk.sources.streams.http.auth import (
+    TokenAuthenticator,
+    BasicHttpAuthenticator,
+    Oauth2Authenticator,
+)
+
+# Bearer token
+auth = TokenAuthenticator(token=config["api_token"])
+
+# Basic HTTP
+auth = BasicHttpAuthenticator(
+    username=config["username"],
+    password=config["password"]
+)
+
+# OAuth 2.0 with refresh token
+auth = Oauth2Authenticator(
+    token_refresh_endpoint="https://api.example.com/oauth/token",
+    client_id=config["client_id"],
+    client_secret=config["client_secret"],
+    refresh_token=config["refresh_token"],
+)
+```
+
+Pass the authenticator to your stream:
+
+```python
+class Employees(HttpStream):
+    def __init__(self, authenticator, **kwargs):
+        super().__init__(authenticator=authenticator, **kwargs)
+```
+
+## Incremental streams
+
+Make a stream incremental by setting `cursor_field` and mixing in `IncrementalMixin`:
+
+```python
+from airbyte_cdk.sources.streams.core import IncrementalMixin
+
+class Employees(HttpStream, IncrementalMixin):
+    url_base = "https://api.example.com"
+    primary_key = "id"
+    cursor_field = "updated_at"
+
+    def __init__(self, start_date: str, **kwargs):
+        super().__init__(**kwargs)
+        self._start_date = start_date
+        self._cursor_value = start_date
+
+    @property
+    def state(self) -> Mapping[str, Any]:
+        return {self.cursor_field: self._cursor_value}
+
+    @state.setter
+    def state(self, value: Mapping[str, Any]):
+        self._cursor_value = value[self.cursor_field]
+
+    def request_params(self, stream_state=None, **kwargs):
+        return {
+            "updated_since": stream_state.get(self.cursor_field, self._start_date)
+        }
+
+    def read_records(self, stream_state=None, **kwargs):
+        for record in super().read_records(stream_state=stream_state, **kwargs):
+            yield record
+            # Update cursor to the latest value seen
+            if record[self.cursor_field] > self._cursor_value:
+                self._cursor_value = record[self.cursor_field]
+```
+
+## Nested streams and caching
+
+When a stream depends on records from another stream (a parent-child relationship), use `HttpSubStream` and enable caching on the parent:
+
+```python
+from airbyte_cdk.sources.streams.http import HttpSubStream
+
+class Employees(HttpStream):
+    url_base = "https://api.example.com"
+    primary_key = "id"
+
+    @property
+    def use_cache(self) -> bool:
+        # Write parent records to a temp file so children can read them
+        return True
+
+    def path(self, **kwargs):
+        return "/employees"
+
+    def parse_response(self, response, **kwargs):
+        yield from response.json()["data"]
+
+
+class EmployeeDetails(HttpSubStream):
+    """Fetches detail records for each employee."""
+    url_base = "https://api.example.com"
+    primary_key = "employee_id"
+
+    def path(self, stream_slice=None, **kwargs):
+        return f"/employees/{stream_slice['parent']['id']}/details"
+
+    def parse_response(self, response, **kwargs):
+        yield response.json()
+```
+
+## Stream schemas
+
+Each stream must declare its schema as JSON Schema. The simplest approach is a `.json` file per stream in the `schemas/` directory:
+
+```json
+// schemas/employees.json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string" },
+    "name": { "type": "string" },
+    "email": { "type": "string" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  }
+}
+```
+
+The file name must match the stream class name in snake_case (e.g. `class EmployeeBenefits` → `schemas/employee_benefits.json`).
+
+You can also generate schemas dynamically by overriding `get_json_schema`:
+
+```python
+def get_json_schema(self):
+    schema = super().get_json_schema()
+    # Add any dynamically discovered fields
+    schema["properties"]["custom_field"] = {"type": "string"}
+    return schema
+```
+
+## Rate limiting
+
+The CDK automatically retries on HTTP 429 and 5xx responses with exponential backoff (5 retries by default). Override `should_retry` and `backoff_time` to customize:
+
+```python
+def should_retry(self, response: requests.Response) -> bool:
+    # Also retry on 503
+    return response.status_code in (429, 500, 502, 503, 504)
+
+def backoff_time(self, response: requests.Response) -> Optional[float]:
+    # Respect Retry-After header if present
+    retry_after = response.headers.get("Retry-After")
+    if retry_after:
+        return float(retry_after)
+    return None
+```
+
+## Connector specification
+
+The `spec.yaml` file (or `spec.json`) in your module root describes the configuration fields your connector requires:
+
+```yaml
+# spec.yaml
+documentationUrl: https://docs.example.com
+connectionSpecification:
+  $schema: http://json-schema.org/draft-07/schema#
+  title: My API
+  type: object
+  required:
+    - api_token
+    - start_date
+  properties:
+    api_token:
+      type: string
+      title: API Token
+      airbyte_secret: true
+    start_date:
+      type: string
+      title: Start Date
+      format: date
+      examples: ["2023-01-01"]
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Local Development" icon="laptop-code" href="/build-connectors/local-development">
+    Set up your development environment and run tests locally.
+  </Card>
+  <Card title="Testing Connectors" icon="flask" href="/build-connectors/testing-connectors">
+    Run unit tests, integration tests, and connector acceptance tests.
+  </Card>
+  <Card title="Best Practices" icon="star" href="/build-connectors/best-practices">
+    Quality guidelines for reliable, maintainable connectors.
+  </Card>
+  <Card title="Submit a Connector" icon="paper-plane" href="/build-connectors/submit-new-connector">
+    Contribute your connector to the Airbyte Marketplace.
+  </Card>
+</CardGroup>

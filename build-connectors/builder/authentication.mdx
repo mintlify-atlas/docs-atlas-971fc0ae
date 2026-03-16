@@ -1,0 +1,184 @@
+---
+title: "Authentication"
+description: "Configure authentication for your Connector Builder connector: Basic HTTP, Bearer, API Key, JWT, OAuth 2.0, Session Token, and more."
+---
+
+Authentication lets your connector verify its identity to the API and access protected data. Credentials are never stored in the connector definition itself — end users provide them when configuring a Source, and Airbyte stores them securely. During development, you supply credentials through the **Testing values** panel.
+
+Configure the authentication method on the **Global Configuration** page in Connector Builder. All streams in a connector share the same authentication method. If your API requires different methods per endpoint, use the [Low-Code CDK](/build-connectors/low-code-cdk) or [Python CDK](/build-connectors/python-cdk) instead.
+
+## Supported methods
+
+<CardGroup cols={2}>
+  <Card title="Basic HTTP" icon="key">Username and password, base64-encoded in the Authorization header.</Card>
+  <Card title="Bearer Token" icon="ticket">A static token sent as `Authorization: Bearer <token>`.</Card>
+  <Card title="API Key" icon="hashtag">A key injected into a header, query parameter, or request body.</Card>
+  <Card title="JWT" icon="shield-halved">A signed JSON Web Token generated from a secret key.</Card>
+  <Card title="OAuth 2.0" icon="rotate">Full authorization code flow or refresh-token flow.</Card>
+  <Card title="Session Token" icon="clock">A short-lived token fetched from a login endpoint before each session.</Card>
+</CardGroup>
+
+## Basic HTTP
+
+Use Basic HTTP when the API documentation mentions "Basic Auth", "Basic HTTP", or `Authorization: Basic`.
+
+Username and password are provided by the end user when configuring a Source. The CDK concatenates them with `:`, base64-encodes the result, and sends it in the `Authorization` header:
+
+```bash
+curl -X GET \
+  -H "Authorization: Basic dXNlcjpwYXNzd2Q=" \
+  https://harvest.greenhouse.io/v1/candidates
+```
+
+**Example APIs:** [Greenhouse](https://developers.greenhouse.io/harvest.html#authentication), [Chargebee](https://apidocs.chargebee.com/docs/api/auth)
+
+## Bearer Token
+
+Use Bearer Token when the documentation mentions "bearer token" or "token authentication". The token is sent as:
+
+```bash
+curl -X GET \
+  -H "Authorization: Bearer <your-token>" \
+  https://api.sendgrid.com/v3/messages
+```
+
+**Example APIs:** [Sendgrid](https://docs.sendgrid.com/api-reference/how-to-use-the-sendgrid-v3-api/authentication), [Square](https://developer.squareup.com/docs/build-basics/access-tokens)
+
+## API Key
+
+API Key authentication injects a key value into a configurable location. Set the **Injection mechanism** and **Field name** in the Builder; the end user provides the key value.
+
+| API description | Injection mechanism |
+|---|---|
+| HTTP header | `header` |
+| Query parameter / URL parameter | `request_parameter` |
+| Form-encoded body | `body_data` |
+| JSON body | `body_json` |
+
+```bash
+# CoinAPI uses a header named X-CoinAPI-Key
+curl -X GET \
+  -H "X-CoinAPI-Key: <api-key>" \
+  https://rest.coinapi.io/v1/exchangerate/BTC/USD
+```
+
+## JWT
+
+JWT authentication generates a signed token using a secret key and algorithm, then sends it in the `Authorization` header.
+
+**Configuration fields:**
+
+| Field | Description |
+|---|---|
+| Secret Key | The signing secret (provided by the end user) |
+| Algorithm | Signing algorithm (e.g. `HS256`, `RS256`) |
+| Header Prefix | Prefix in the Authorization header (default: `Bearer`) |
+| Token Duration | Seconds before the token expires |
+| Base64 Encode Secret Key | Enable if the API requires the secret to be base64-encoded first |
+| Additional JWT Headers | Extra key-value pairs in the JWT header |
+| Additional JWT Payload | Extra claims in the JWT payload |
+
+```bash
+curl -X GET \
+  -H "Authorization: Bearer <generated-jwt>" \
+  https://api.example.com/data
+```
+
+## OAuth 2.0
+
+OAuth 2.0 authorizes access without sharing credentials directly with Airbyte. There are two approaches:
+
+<Tabs>
+  <Tab title="Declarative OAuth (recommended)">
+    Enable **Declarative OAuth Connector Specification** to support the full authorization code flow. Users are redirected to a consent screen; the connector then exchanges the authorization code for tokens automatically.
+
+    **Consent URL** — template for the URL where users grant consent:
+    ```
+    https://api.example.com/oauth/authorize
+      ?client_id={{client_id_value}}
+      &redirect_uri={{redirect_uri_value}}
+      &scope={{scope_value}}
+      &state={{state_value}}
+    ```
+
+    **Access Token URL** — endpoint to exchange the authorization code:
+    ```
+    https://api.example.com/oauth/token
+    ```
+
+    Optional overrides are available for custom field names (`client_id`, `client_secret`, `scope`, `state`, `code`, `redirect_uri`).
+  </Tab>
+  <Tab title="Refresh Token (legacy)">
+    Use this when you already have OAuth credentials or the API doesn't support the full authorization code flow. Users provide client ID, client secret, and a refresh token manually.
+
+    The connector calls the token refresh endpoint:
+
+    ```bash
+    curl -X POST \
+      -H "Content-Type: application/json" \
+      -d '{
+        "client_id": "<id>",
+        "client_secret": "<secret>",
+        "refresh_token": "<token>",
+        "grant_type": "refresh_token"
+      }' \
+      https://connect.squareup.com/oauth2/token
+    ```
+
+    The response must include `access_token`. Configure `Token Expiry Property Name` if the expiry field has a non-standard name (e.g. `expires_at` instead of `expires_in`).
+
+    **Key configuration options:**
+
+    | Field | Description |
+    |---|---|
+    | Token Refresh Endpoint | Full URL of the token endpoint |
+    | Grant Type | `refresh_token` or `client_credentials` |
+    | Scopes | Space-separated OAuth scopes |
+    | Access Token Property Name | Response field containing the access token (default: `access_token`) |
+    | Token Expiry Property Name | Response field containing expiry info (default: `expires_in`) |
+    | Refresh Token Updater | Enable for APIs that issue a new refresh token on every refresh |
+  </Tab>
+</Tabs>
+
+### Single-use refresh tokens
+
+Some APIs (e.g. [Smartsheets](https://smartsheet.redoc.ly/#section/OAuth-Walkthrough/Get-or-Refresh-an-Access-Token)) invalidate the refresh token after each use. Enable **Refresh Token Updater** to handle this. The connector will:
+
+- Expect a new `refresh_token` in every token refresh response
+- Automatically update its configuration with the new token before the next sync
+- Require you to provide an initial access token and expiry date in Testing values
+
+## Session Token
+
+Use Session Token for APIs that require a login request first (keywords: "Session Token", "Session ID", "Auth Token", "Temporary Token").
+
+Configuration has two parts: how to fetch the session token, and how to use it.
+
+**Session Token Retrieval:**
+
+| Field | Example (Metabase API) |
+|---|---|
+| URL | `https://<app>.metabaseapp.com/api/session` |
+| HTTP Method | `POST` |
+| Authentication Method | `No Auth` (credentials go in the body instead) |
+| Request Body | `username: {{ config['username'] }}`, `password: {{ config['password'] }}` |
+
+**Session Token Path** — path into the response to find the token. For Metabase, the response is `{"id": "<token>"}` so the path is `id`.
+
+**Expiration Duration** — ISO 8601 duration (e.g. `P14D` for 14 days). If not set, a new token is fetched before every request, which is much slower.
+
+**Data Request Authentication** — how the session token is injected into data requests:
+- `API Key` — injects into a header or query parameter (e.g. Metabase uses header `X-Metabase-Session`)
+- `Bearer` — sends as a standard Bearer token
+
+## Selective Authenticator
+
+Lets users choose between multiple authentication methods. Because it requires nested spec inputs, you must configure it in YAML mode rather than through the visual UI.
+
+## Shared Authenticator
+
+The Connector Builder UI shows a link icon next to authenticator fields that can be shared across components. Toggle it on to share the same configuration, or off to use a local override. When values conflict, a dialog prompts you to choose which one to keep.
+
+## Custom authentication
+
+For APIs that require request signing, HMAC, or multi-step authentication flows, use the [Low-Code CDK](/build-connectors/low-code-cdk) or [Python CDK](/build-connectors/python-cdk).

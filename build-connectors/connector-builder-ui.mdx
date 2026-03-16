@@ -1,0 +1,96 @@
+---
+title: "Connector Builder UI"
+description: "Build source connectors visually inside the Airbyte web UI — no local environment required."
+---
+
+Connector Builder is a no-code tool built into the Airbyte UI. It gives you an intuitive interface on top of the [low-code YAML format](https://docs.airbyte.com/connector-development/config-based/understanding-the-yaml-file/yaml-overview), letting you develop a connector for data syncs without ever leaving your Airbyte workspace.
+
+<Note>
+Connector Builder only supports **source** connectors. You cannot build destination connectors with it.
+</Note>
+
+## How it works
+
+When you configure a connector in the Builder UI, you're creating a YAML manifest behind the scenes. The Builder validates your configuration in real time and surfaces clear error messages. You can switch between the visual form view and direct YAML editing at any point, and export the manifest file whenever you need it.
+
+Connector Builder has the same capabilities as writing low-code YAML connectors by hand. The UI just makes the process faster and less error-prone.
+
+## When to use Connector Builder
+
+Use Connector Builder if:
+
+- The API you want to connect to doesn't have an existing connector in the [catalog](/connectors/connector-catalog)
+- The API uses HTTP requests (REST or GraphQL)
+- The API returns data in JSON, JSONL, CSV, or XML format
+- You don't want to set up a local development environment
+
+If the Builder doesn't cover your API's behavior (for example, unusual auth schemes or non-HTTP data sources), consider the [Low-Code CDK](/build-connectors/low-code-cdk) or [Python CDK](/build-connectors/python-cdk) instead.
+
+## Getting started
+
+<Steps>
+  <Step title="Open Connector Builder">
+    In the Airbyte web app, select **Builder** in the left-hand sidebar.
+  </Step>
+  <Step title="Configure global settings">
+    Set the API base URL, authentication method, and any global request parameters. These apply to all streams in your connector.
+  </Step>
+  <Step title="Add streams">
+    Add one stream per API resource. For each stream, configure the path, record selector, pagination, and optionally incremental sync and partitioning.
+  </Step>
+  <Step title="Test your connector">
+    Use the **Testing values** panel to provide credentials and run test reads against the API. Inspect the records returned and refine your configuration.
+  </Step>
+  <Step title="Publish to your workspace">
+    When you're satisfied, click **Publish** to make the connector available in your Airbyte workspace.
+  </Step>
+  <Step title="Use it in a connection">
+    Configure a Source using your published connector, then create a connection to start syncing data.
+  </Step>
+</Steps>
+
+<Tip>
+Never hardcode API keys or passwords in the Builder configuration. Provide them as **Testing values** during development. After publishing, end users supply credentials through the source configuration form.
+</Tip>
+
+## Builder topics
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="lock" href="/build-connectors/builder/authentication">
+    Configure Basic HTTP, Bearer Token, API Key, JWT, OAuth 2.0, Session Token, and more.
+  </Card>
+  <Card title="Pagination" icon="arrow-right" href="/build-connectors/builder/pagination">
+    Handle offset, page-number, and cursor-based pagination automatically.
+  </Card>
+  <Card title="Incremental Sync" icon="clock-rotate-left" href="/build-connectors/builder/incremental-sync">
+    Sync only new or updated records using datetime cursors.
+  </Card>
+  <Card title="Partitioning" icon="layer-group" href="/build-connectors/builder/partitioning">
+    Iterate over sub-resources like accounts, projects, or surveys.
+  </Card>
+  <Card title="Record Processing" icon="filter" href="/build-connectors/builder/record-processing">
+    Extract, transform, and schema-validate records from API responses.
+  </Card>
+  <Card title="Error Handling" icon="triangle-exclamation" href="/build-connectors/builder/error-handling">
+    Configure retry strategies, backoff, and response filters.
+  </Card>
+  <Card title="Custom Components" icon="puzzle-piece" href="/build-connectors/builder/custom-components">
+    Extend Builder with custom Python classes for edge cases.
+  </Card>
+</CardGroup>
+
+## Contributing a connector
+
+To share your connector with other Airbyte users:
+
+1. Click **Publish** → **Contribute to Marketplace**
+2. Fill in the connector description and paste your GitHub Personal Access Token
+3. Click **Contribute** — Builder opens a pull request automatically
+
+Reviews typically take under a week. You can also export the YAML manifest and share it manually.
+
+## Limitations
+
+- Connector Builder requires Airbyte to be running with sufficient resources. If you deployed Airbyte with `abctl --low-resource-mode`, the Builder is disabled. Redeploy without that flag to enable it.
+- Some advanced authentication schemes (PKCE, custom signing) require the Low-Code CDK or Python CDK.
+- Custom components are experimental and disabled by default. See the [Custom Components](/build-connectors/builder/custom-components) page for how to enable them.

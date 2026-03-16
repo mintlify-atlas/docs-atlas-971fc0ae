@@ -1,0 +1,176 @@
+---
+title: Amazon S3 Source
+description: Replicate files from Amazon S3 in CSV, Parquet, Avro, or JSONL formats using glob patterns for flexible file selection.
+---
+
+Airbyte's S3 source connector reads files from Amazon S3 buckets and replicates them as structured records. It supports CSV, Parquet, Avro, and JSONL file formats, as well as compressed files (gzip, zip, bzip2). You define streams using glob patterns that match file paths within your bucket.
+
+<Warning>
+Using this connector may incur S3 egress costs when Airbyte reads data from your bucket. Check the [AWS S3 pricing guide](https://aws.amazon.com/s3/pricing/) for details.
+</Warning>
+
+## Prerequisites
+
+- An S3 bucket with files to replicate
+- For **private buckets**: AWS credentials (IAM user access keys or IAM role ARN) with `s3:GetObject` and `s3:ListBucket` permissions
+
+## Setup guide
+
+### Step 1: Create an IAM policy and credentials
+
+<Steps>
+  <Step title="Create an IAM policy">
+    1. Open the [IAM console](https://console.aws.amazon.com/iam/home#home) and go to **Policies** > **Create Policy**.
+    2. Paste the following JSON (substitute your bucket name):
+
+    ```json
+    {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Effect": "Allow",
+          "Action": ["s3:GetObject", "s3:ListBucket"],
+          "Resource": [
+            "arn:aws:s3:::{your-bucket-name}/*",
+            "arn:aws:s3:::{your-bucket-name}"
+          ]
+        }
+      ]
+    }
+    ```
+
+    3. Name the policy and click **Create policy**.
+  </Step>
+  <Step title="Attach credentials">
+    <Tabs>
+      <Tab title="IAM user (access keys)">
+        1. Go to **Users**, select or create a user, and click **Add permissions**.
+        2. Attach the policy you created.
+        3. Under **Security credentials**, click **Create access key** to generate an Access Key ID and Secret Access Key.
+      </Tab>
+      <Tab title="IAM role (most secure)">
+        1. Go to **Roles** > **Create role** and select **AWS account** as the trusted entity.
+        2. Set up a trust relationship using your Airbyte workspace ID as the External ID.
+        3. Attach the policy to the role and note the **Role ARN**.
+
+        <Note>
+        IAM role authentication on Airbyte Cloud must be enabled by the Airbyte team. Contact Sales if you'd like to use this method.
+        </Note>
+      </Tab>
+    </Tabs>
+  </Step>
+</Steps>
+
+### Step 2: Set up the S3 connector in Airbyte
+
+1. In Airbyte, go to **Sources** > **+ New source** and select **S3**.
+2. Enter a name for the connector.
+3. Choose a **Delivery Method** for your data.
+4. Enter the **Bucket** name.
+5. Click **Add stream** to configure a stream:
+   - Select a **File Format** (CSV, Parquet, Avro, JSONL).
+   - Enter a **Name** for the stream.
+   - Enter **Globs** to match files (e.g., `**` for all files, `**/*.csv` for all CSV files).
+   - (Optional) Set **Input schema** to enforce a specific schema.
+   - (Optional) Enable **Schemaless** to skip schema validation.
+6. For private bucket authentication:
+   - IAM user: enter **AWS Access Key ID** and **AWS Secret Access Key**.
+   - IAM role: enter the **AWS Role ARN**.
+7. Click **Set up source**.
+
+## Supported sync modes
+
+| Feature | Supported |
+|---------|-----------|
+| Full Refresh Sync | Yes |
+| Incremental Sync | Yes |
+| Replicate Incremental Deletes | No |
+| Multiple files (glob patterns) | Yes |
+| Multiple streams | Yes |
+| Namespaces | No |
+
+## File formats
+
+<Accordion title="CSV">
+  - **Delimiter**: character that separates values (default: `,`)
+  - **Quote character**: character that wraps quoted values (default: `"`)
+  - **Escape character**: character used to escape reserved characters
+  - **Header definition**: auto-detect, user-provided, or auto-generated
+  - **Encoding**: default `utf8`; other standard encodings supported
+  - **Null values** and **true/false values**: configurable case-sensitive string sets
+  - **Skip rows before/after header**: for files with metadata rows
+</Accordion>
+
+<Accordion title="Parquet">
+  - Column-oriented format with efficient compression
+  - Optionally convert decimal fields to floats
+  - Partitioned parquet datasets are not supported
+</Accordion>
+
+<Accordion title="Avro">
+  - Uses the Fastavro library
+  - Optionally convert double fields to strings to preserve precision
+</Accordion>
+
+<Accordion title="JSONL">
+  - Newline-delimited JSON; no additional configuration options
+</Accordion>
+
+## File compression
+
+| Format | Supported |
+|--------|-----------|
+| Gzip | Yes |
+| Zip | Yes |
+| Bzip2 | Yes |
+| Lzma | No |
+| Xz | No |
+| Snappy | No |
+
+## Glob patterns
+
+Use glob patterns to match file paths in your bucket. Patterns are relative to the bucket root.
+
+| Pattern | Matches |
+|---------|--------|
+| `**` | All files in the bucket |
+| `**/*.csv` | All CSV files |
+| `myFolder/**/*.csv` | All CSV files under `myFolder` |
+| `*/**` | All files at least one folder deep |
+| `**/prefix*.parquet` | All Parquet files with a specific prefix |
+
+Separate multiple patterns with `|`.
+
+## Incremental sync state
+
+Airbyte syncs files from oldest to newest and tracks up to 10,000 files in the connection's state history. When history is full, only files modified after `(newest file date - Days to Sync if History is Full)` are synced.
+
+## Configuration reference
+
+<ParamField path="bucket" type="string" required>
+  The name of the S3 bucket.
+</ParamField>
+
+<ParamField path="aws_access_key_id" type="string">
+  AWS Access Key ID for IAM user authentication.
+</ParamField>
+
+<ParamField path="aws_secret_access_key" type="string">
+  AWS Secret Access Key for IAM user authentication.
+</ParamField>
+
+<ParamField path="role_arn" type="string">
+  AWS Role ARN for IAM role authentication.
+</ParamField>
+
+<ParamField path="endpoint" type="string">
+  Optional endpoint URL for non-Amazon S3-compatible storage.
+</ParamField>
+
+<ParamField path="start_date" type="string">
+  Optional start date in `YYYY-MM-DDTHH:mm:ssZ` format. Files not modified since this date are not replicated.
+</ParamField>
+
+<ParamField path="streams" type="array" required>
+  Array of stream configurations. Each stream defines a name, file format, globs, and optional schema.
+</ParamField>

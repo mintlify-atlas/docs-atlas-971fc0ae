@@ -1,0 +1,96 @@
+---
+title: "Supported Data Types"
+description: "The Airbyte type system for records flowing through the platform"
+---
+
+# Data types in records
+
+AirbyteRecords must conform to the Airbyte type system. Sources must produce schemas and records within these types, and destinations must handle records that conform to this type system.
+
+Because Airbyte's interfaces are JSON-based, this type system is realized using [JSON Schema](https://json-schema.org/). An additional `airbyte_type` parameter narrows types where needed.
+
+## Type reference
+
+| Airbyte type | JSON Schema | Example values |
+|---|---|---|
+| String | `{"type": "string"}` | `"foo bar"` |
+| Boolean | `{"type": "boolean"}` | `true` or `false` |
+| Date | `{"type": "string", "format": "date"}` | `"2021-01-23"` |
+| Timestamp without timezone | `{"type": "string", "format": "date-time", "airbyte_type": "timestamp_without_timezone"}` | `"2022-11-22T01:23:45"` |
+| Timestamp with timezone | `{"type": "string", "format": "date-time"}` | `"2022-11-22T01:23:45Z"` |
+| Time without timezone | `{"type": "string", "format": "time", "airbyte_type": "time_without_timezone"}` | `"01:23:45.123456"` |
+| Time with timezone | `{"type": "string", "format": "time", "airbyte_type": "time_with_timezone"}` | `"01:23:45Z"` |
+| Integer | `{"type": "integer"}` | `42` |
+| Number | `{"type": "number"}` | `1234.56` |
+| Array | `{"type": "array"}` | `[1, 2, 3]` |
+| Object | `{"type": "object"}` | `{"foo": "bar"}` |
+| Union | `{"oneOf": [...]}` | |
+
+## Record structure example
+
+Sources expose a `discover` command returning a list of `AirbyteStreams`. Each stream has a `json_schema` that conforms to the type system:
+
+```json
+{
+  "name": "users",
+  "json_schema": {
+    "type": "object",
+    "properties": {
+      "username": { "type": "string" },
+      "age": { "type": "integer" },
+      "appointments": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "format": "date-time",
+          "airbyte_type": "timestamp_with_timezone"
+        }
+      }
+    }
+  }
+}
+```
+
+The corresponding `AirbyteRecordMessage` must conform to the schema:
+
+```json
+{
+  "stream": "users",
+  "data": {
+    "username": "someone42",
+    "age": 84,
+    "appointments": ["2021-11-22T01:23:45+00:00", "2022-01-22T14:00:00+00:00"]
+  },
+  "emitted_at": 1623861660
+}
+```
+
+## Handling nulls
+
+Many sources cannot guarantee all fields are present on all records. In these cases, sources should:
+
+1. Not list optional fields as `required`
+2. Declare that the property can be null: `{"type": ["null", "string"]}`
+
+<Warning>
+If a null value is found for a non-nullable schema field, a validation error may occur in the platform or the destination may have trouble storing the record.
+</Warning>
+
+## Destination type mapping
+
+Each destination maps Airbyte types to its native types. For example:
+
+| Airbyte type | BigQuery | Snowflake | Redshift |
+|---|---|---|---|
+| String | STRING | TEXT | VARCHAR |
+| Boolean | BOOL | BOOLEAN | BOOLEAN |
+| Integer | INT64 | NUMBER | BIGINT |
+| Number | FLOAT64 | FLOAT | FLOAT |
+| Date | DATE | DATE | DATE |
+| Timestamp with timezone | TIMESTAMP | TIMESTAMP_TZ | TIMESTAMPTZ |
+| Array | JSON | VARIANT | SUPER |
+| Object | JSON | VARIANT | SUPER |
+
+<Note>
+Destinations may not fully support all values. For example, Avro-based destinations may reject numeric values outside 64-bit ranges, or databases may reject timestamps in the BC era.
+</Note>

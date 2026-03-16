@@ -1,0 +1,65 @@
+---
+title: "Connector Development Overview"
+description: "Choose the right tool to build Airbyte source connectors — from no-code Connector Builder to the full Python CDK."
+---
+
+If you want to integrate a data source that isn't already in the [Airbyte connector catalog](/connectors/connector-catalog), you can build your own. Airbyte provides several tools at different levels of abstraction so you can pick the one that matches your API and your comfort level with code.
+
+<Note>
+Before you start building, review the [Airbyte protocol specification](https://docs.airbyte.com/understanding-airbyte/airbyte-protocol) and the [connector development best practices](/build-connectors/best-practices). If you get stuck, the [#connector-development Slack channel](https://airbytehq.slack.com/archives/C027KKE4BCZ) is a good place to search past discussions or ask questions.
+</Note>
+
+## Process overview
+
+<Steps>
+  <Step title="Pick the right tool and build">
+    Start by choosing how you want to build. For most REST API source connectors, [Connector Builder](/build-connectors/connector-builder-ui) is the right starting point — no local setup required.
+  </Step>
+  <Step title="Test your connector">
+    Run test syncs in Connector Builder or locally with the `poe` CLI. Make sure authentication, pagination, and incremental sync all work before publishing.
+  </Step>
+  <Step title="Publish as a custom connector">
+    Publish your connector to your Airbyte workspace so you can use it in connections to move data.
+  </Step>
+  <Step title="Contribute back to Airbyte (optional)">
+    If you want others to benefit from your work, follow the [contribution guide](/build-connectors/submit-new-connector) to submit your connector to the Airbyte Marketplace.
+  </Step>
+</Steps>
+
+## Choose your development tool
+
+<CardGroup cols={2}>
+  <Card title="Connector Builder UI" icon="wand-magic-sparkles" href="/build-connectors/connector-builder-ui">
+    The fastest way to build source connectors. Configure your connector visually inside the Airbyte web UI — no local environment required. Works for any HTTP API that returns JSON, JSONL, CSV, or XML.
+  </Card>
+  <Card title="Low-Code CDK" icon="code" href="/build-connectors/low-code-cdk">
+    Edit YAML manifests directly to describe your connector declaratively. The same format that powers Connector Builder, with full access to the declarative component schema.
+  </Card>
+  <Card title="Python CDK" icon="python" href="/build-connectors/python-cdk">
+    Full Python flexibility for complex connectors. Extend `AbstractSource` and `HttpStream` base classes, implement custom auth, pagination, and incremental sync logic in code.
+  </Card>
+  <Card title="Local Development" icon="laptop-code" href="/build-connectors/local-development">
+    Set up a local development environment with `poe`, `uv`, and Docker to build, test, and debug connectors before publishing.
+  </Card>
+</CardGroup>
+
+## Comparison
+
+| | Connector Builder | Low-Code CDK | Python CDK |
+|---|---|---|---|
+| **Where you work** | Airbyte web UI | YAML file in your editor | Python code in your editor |
+| **Local setup required** | No | Yes | Yes |
+| **Supports destination connectors** | No | No | Yes |
+| **Custom Python logic** | Limited (experimental) | Yes, via custom components | Yes, full control |
+| **Best for** | Most REST APIs | Complex declarative needs | Non-HTTP or highly custom sources |
+
+## Community-maintained CDKs
+
+Airbyte doesn't officially support these, but they exist if you need them:
+
+- [TypeScript CDK](https://github.com/faros-ai/airbyte-connectors) — actively maintained by Faros.ai
+- [.NET CDK](https://github.com/mrhamburg/airbyte.cdk.dotnet) — C# implementation
+
+<Warning>
+The Java CDK is currently being revamped. Airbyte is not accepting Java CDK contributions at this time.
+</Warning>
