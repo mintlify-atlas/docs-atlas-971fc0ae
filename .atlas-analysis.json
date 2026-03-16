@@ -1,0 +1,255 @@
+{
+  "projectType": "saas",
+  "projectName": "Airbyte",
+  "projectDescription": "Open-source data integration platform for building ELT/ETL pipelines from 600+ sources (APIs, databases, files) to data warehouses, lakes, and lakehouses — available self-hosted or as a managed cloud service.",
+  "theme": "linden",
+  "primaryColor": "#5d59e6",
+  "lightColor": "#aca4e2",
+  "darkColor": "#0c0c34",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Get Started",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "introduction",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Using Airbyte",
+            "pages": [
+              "using-airbyte/add-a-source",
+              "using-airbyte/add-a-destination",
+              "using-airbyte/set-up-a-connection",
+              "using-airbyte/core-concepts",
+              "using-airbyte/sync-modes",
+              "using-airbyte/sync-schedules",
+              "using-airbyte/schema-change-management",
+              "using-airbyte/namespaces",
+              "using-airbyte/typing-deduplication"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Deploy",
+        "groups": [
+          {
+            "group": "Deployment Options",
+            "pages": [
+              "deploy/overview",
+              "deploy/abctl",
+              "deploy/helm-kubernetes",
+              "deploy/docker-compose"
+            ]
+          },
+          {
+            "group": "Cloud Infrastructure",
+            "pages": [
+              "deploy/aws",
+              "deploy/gcp",
+              "deploy/azure"
+            ]
+          },
+          {
+            "group": "Self-Managed Enterprise",
+            "pages": [
+              "deploy/enterprise-setup",
+              "deploy/enterprise-implementation"
+            ]
+          },
+          {
+            "group": "Operations",
+            "pages": [
+              "deploy/secrets",
+              "deploy/troubleshoot-deploy",
+              "deploy/connector-updates"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Connectors",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "connectors/connector-catalog",
+              "connectors/connector-support-levels",
+              "connectors/custom-connectors"
+            ]
+          },
+          {
+            "group": "Popular Sources",
+            "pages": [
+              "connectors/sources/postgres",
+              "connectors/sources/mysql",
+              "connectors/sources/salesforce",
+              "connectors/sources/hubspot",
+              "connectors/sources/stripe",
+              "connectors/sources/github",
+              "connectors/sources/google-analytics-data-api",
+              "connectors/sources/snowflake",
+              "connectors/sources/mongodb-v2",
+              "connectors/sources/s3"
+            ]
+          },
+          {
+            "group": "Popular Destinations",
+            "pages": [
+              "connectors/destinations/bigquery",
+              "connectors/destinations/snowflake",
+              "connectors/destinations/postgres",
+              "connectors/destinations/redshift",
+              "connectors/destinations/s3",
+              "connectors/destinations/databricks"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Build Connectors",
+        "groups": [
+          {
+            "group": "Connector Development",
+            "pages": [
+              "build-connectors/overview",
+              "build-connectors/connector-builder-ui",
+              "build-connectors/low-code-cdk",
+              "build-connectors/python-cdk",
+              "build-connectors/local-development"
+            ]
+          },
+          {
+            "group": "Connector Builder",
+            "pages": [
+              "build-connectors/builder/authentication",
+              "build-connectors/builder/pagination",
+              "build-connectors/builder/incremental-sync",
+              "build-connectors/builder/partitioning",
+              "build-connectors/builder/record-processing",
+              "build-connectors/builder/error-handling",
+              "build-connectors/builder/custom-components"
+            ]
+          },
+          {
+            "group": "Testing & Publishing",
+            "pages": [
+              "build-connectors/testing-connectors",
+              "build-connectors/submit-new-connector",
+              "build-connectors/connector-metadata-file",
+              "build-connectors/best-practices"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Platform",
+        "groups": [
+          {
+            "group": "Architecture",
+            "pages": [
+              "platform/architecture-overview",
+              "platform/airbyte-protocol",
+              "platform/tech-stack",
+              "platform/jobs",
+              "platform/supported-data-types"
+            ]
+          },
+          {
+            "group": "Data Movement",
+            "pages": [
+              "platform/cdc",
+              "platform/cdc-best-practices",
+              "platform/typing-deduplication",
+              "platform/resumability",
+              "platform/secrets"
+            ]
+          },
+          {
+            "group": "Access & Security",
+            "pages": [
+              "platform/access-management",
+              "platform/organizations-workspaces",
+              "platform/sso"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Developers",
+        "groups": [
+          {
+            "group": "APIs & SDKs",
+            "pages": [
+              "developers/api-documentation",
+              "developers/terraform-provider",
+              "developers/pyairbyte"
+            ]
+          },
+          {
+            "group": "PyAirbyte",
+            "pages": [
+              "developers/pyairbyte/overview",
+              "developers/pyairbyte/getting-started",
+              "developers/pyairbyte/api-reference"
+            ]
+          },
+          {
+            "group": "Orchestration",
+            "pages": [
+              "developers/orchestration/airflow",
+              "developers/orchestration/prefect",
+              "developers/orchestration/dagster",
+              "developers/orchestration/kestra"
+            ]
+          },
+          {
+            "group": "MCP Servers",
+            "pages": [
+              "developers/mcp-servers/overview"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "600+ pre-built connectors for APIs, databases, files, and data warehouses",
+    "No-code Connector Builder UI for building custom connectors without code",
+    "Low-code CDK (Connector Development Kit) for Python-based connector development",
+    "Change Data Capture (CDC) support for real-time database replication",
+    "Typing and deduplication (T+D) for clean, typed data in destinations",
+    "Incremental and full-refresh sync modes",
+    "Self-hosted (Kubernetes/Helm) and Airbyte Cloud managed deployment options",
+    "Self-Managed Enterprise edition with SSO, RBAC, and advanced security",
+    "PyAirbyte library for programmatic data extraction in Python/Jupyter",
+    "Terraform provider for infrastructure-as-code management",
+    "Native orchestration integrations with Airflow, Prefect, Dagster, and Kestra",
+    "Schema change management with automatic detection and handling"
+  ],
+  "publicApiSurface": [
+    "GET /v1/sources — List sources",
+    "POST /v1/sources — Create a source",
+    "GET /v1/destinations — List destinations",
+    "POST /v1/destinations — Create a destination",
+    "GET /v1/connections — List connections",
+    "POST /v1/connections — Create a connection",
+    "POST /v1/jobs — Trigger a sync job",
+    "GET /v1/jobs/{jobId} — Get job status",
+    "PyAirbyte: ab.get_source(name, config) — Get a source connector",
+    "PyAirbyte: source.get_records(stream) — Read records from a stream",
+    "PyAirbyte: ab.get_available_connectors() — List available connectors",
+    "Terraform: airbyte_source resource",
+    "Terraform: airbyte_destination resource",
+    "Terraform: airbyte_connection resource",
+    "Airbyte Protocol: spec() — Return connector configuration schema",
+    "Airbyte Protocol: check() — Validate connector credentials",
+    "Airbyte Protocol: discover() — Return source catalog/schema",
+    "Airbyte Protocol: read() — Read records from source",
+    "Airbyte Protocol: write() — Write records to destination"
+  ]
+}
